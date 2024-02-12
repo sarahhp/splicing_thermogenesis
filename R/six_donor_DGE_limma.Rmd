@@ -1,0 +1,558 @@
+---
+title: "six_donor_DGE_limma"
+author: "Sarah Hp"
+date: "2023-08-18"
+output: html_document
+---
+
+```{r message=FALSE, warning=FALSE}
+library(limma)
+library(edgeR)
+library(biomaRt,lib.loc=.libPaths()[-1])
+library(ggplot2)
+library(ggrepel)
+library(tidyr, lib.loc=.libPaths()[-1])
+library(RUVSeq)
+library(clusterProfiler)
+```
+
+```{r}
+library(here)
+i_am("R/six_donor_DGE_limma.Rmd")
+knitr::opts_chunk$set(echo = TRUE, dev = c("pdf"), fig.path = "six_donor_DGE_limma_plots/")
+```
+Load experiment 1; select relevant samples
+
+```{r}
+la = read.delim(here("02featureCounts/late_adipo_s4_s6.nomm.feature.counts"), skip=1)
+colnames(la) = gsub("output.01hisat.","",gsub(".sorted.bam","", colnames(la)))
+
+# select the bulk day15 samples
+la = la[,c(1:6,grep("^(19|2[01234])", colnames(la)))]
+head(la)
+```
+
+Load experiment 2; select relevant samples
+```{r}
+fc = read.delim(here("02featureCounts/beige_rnaseq.nomm.feature.counts"), skip=1)
+colnames(fc) = gsub("output.01hisat.","",gsub(".sorted.bam","", colnames(fc)))
+head(fc)[1:9]
+```
+
+Match experiments
+```{r}
+nrow(la); nrow(fc)
+counts = merge(fc, la, by=colnames(fc)[1:6])
+#head(counts)
+colnames(counts)
+nrow(counts)
+```
+Save this to file for GEO submission later. [Reanalysis of s4/s6 white]
+```{r}
+write.table(counts, here( "02featureCounts/six_donors.merged.nomm.counts"), sep="\t", quote=F, row.names = F)
+```
+
+formatting
+```{r}
+counts$Geneid = gsub("\\..*", "", counts$Geneid)
+counts[counts$Geneid == "ENSG00000132170",7:ncol(counts)]# double check gene matching
+```
+
+Load info
+```{r}
+info = readxl::read_xlsx(here("sample_info/publication_ids.xlsx"))
+info$frac_assigned_to_genes = as.double(gsub("%","", info$percent_assigned_to_genes))/100
+info$donor.condition = paste(info$donor, info$condition, sep=".")
+head(info)
+```
+
+
+```{r}
+counts$Geneid = gsub("\\..*", "", counts$Geneid)
+counts[counts$Geneid == "ENSG00000132170",7:ncol(counts)]# double check gene matching
+```
+
+## Make object
+
+```{r}
+rownames(info) = gsub("-",".", info$sample)
+info = info[colnames(counts)[7:ncol(counts)],]#make sure order is the same
+summary(rownames(info) == colnames(counts)[7:ncol(counts)])
+
+ob = DGEList(counts = data.matrix(counts[7:ncol(counts)]),
+             samples = info,
+             group = info$donor.condition,
+             genes = counts[c(1,6)])
+rownames(ob$counts) = ob$genes$Geneid
+#head(ob)
+
+summary(ob$counts[grep("ENSG00000132170", rownames(ob$counts)),c(1,5:ncol(ob$counts))]) ##PPARG check
+```
+
+```{r}
+plotMDS(ob, top = 5000, labels =ob$samples$group, col = c(1:12)[ob$samples$group])
+library(RColorBrewer)
+to_col = colorRampPalette(c("blue","red"))(25)
+plotMDS(ob, top = 5000, labels =ob$samples$percent_assigned_to_genes, col = c(1:12)[ob$samples$group])
+```
+
+```{r}
+plotMDS(ob, top = 5000, labels =ob$samples$group, col = c(1:12)[ob$samples$group], 
+        dim.plot = c(3,4))
+plotMDS(ob, top = 5000, labels =ob$samples$group, col = c(1:12)[ob$samples$group], 
+        dim.plot = c(5,6))
+plotMDS(ob, top = 5000, labels =ob$samples$percent_assigned_to_genes, col = c(1:12)[ob$samples$group], 
+        dim.plot = c(5,6))
+```
+
+## Filter
+
+```{r}
+plotRLE(ob$counts, outline=FALSE, col=ob$samples$group, main="Before Filtering")
+plotSmear(ob, main = "Before Filtering")
+plotSmear(ob, main = "Before Filtering", pair=c("subject6.beige","subject6.white"))
+ob$samples$group = as.factor(ob$samples$condition)
+plotSmear(ob, main = "Before Filtering: White vs Beige")
+nrow(ob) #60 668 genes before filtering
+```
+
+Slight shift in mean between white and beige for s6.  
+
+Conduct a filtering using white and beige
+min.count and min.prop are default I just thought I'd list them here
+
+```{r}
+levels(ob$samples$group)
+filt = ob[filterByExpr(ob, min.count=10, min.prop=0.7),, keep.lib.sizes=FALSE]
+nrow(filt) #18061
+```
+
+```{r}
+plotRLE(filt$counts, outline=FALSE, col=filt$samples$group, main="After Filtering")
+filt$samples$group = as.factor(filt$samples$donor.condition)
+plotSmear(filt, main = "After Filtering")
+plotSmear(filt, main = "After Filtering", pair=c("subject6.beige","subject6.white"))
+filt$samples$group = as.factor(filt$samples$condition)
+plotSmear(filt, main = "After Filtering: White vs Beige")
+```
+
+Sanity checks
+
+```{r}
+summary(filt$counts[grep("ENSG00000132170", rownames(filt$counts)),]) #PPARG is included and looks highly expr
+summary(filt$counts[grep("ENSG00000228630", rownames(filt$counts)),]) #HOTAIR is still detected at low levels (Subject3 and 4 mostly)
+rownames(filt$counts)[grep("ENSG00000223972.5", rownames(filt$counts))] #This lowly expr gene is filtered out DDX11L1 
+summary(filt$counts[grep("ENSG00000176194", rownames(filt$counts)),]) #CIDEA at low levels in beige samples (but NOT s2 and s1)
+```
+### Norm Factors
+```{r}
+filt = calcNormFactors(filt, method="TMM")
+filt$samples[c("norm.factors")]
+summary(filt$samples$norm.factors)
+```
+
+```{r}
+plotRLE(cpm(filt, normalized.lib.sizes = F), outline=F, col=filt$samples$group, las=3,
+        main="After TMM normalisation (no libsize)")
+plotRLE(cpm(filt, normalized.lib.sizes = T), outline=F, col=filt$samples$group, las=3,
+        main="After TMM + libsize normalisation")
+```
+
+## Annotate gene lists
+
+```{r}
+mart <- biomaRt::useMart(biomart = "ensembl",
+  dataset = "hsapiens_gene_ensembl",
+   host = "https://sep2019.archive.ensembl.org")
+
+#searchFilters(mart, pattern="ensembl")
+
+annot = getBM(c("external_gene_name", "description", "gene_biotype","ensembl_gene_id", "ensembl_gene_id_version"), 
+              filters = "ensembl_gene_id",
+              values = filt$genes$Geneid,
+              mart = mart)
+
+head(annot, n=2); dim(annot)
+#Tidying up the annot table
+annot$description = gsub("\\[Source:.+\\]", "", annot$description)
+colnames(annot)[1] = "gene_name"
+
+#Add gene names to filt_series
+filt$genes = merge(filt$genes, annot, by.x= "Geneid", 
+                        by.y = "ensembl_gene_id", sort=FALSE)
+#head(filt$genes)
+#make sure length is numeric
+filt$genes$Length = as.numeric(filt$genes$Length)
+
+#match the gene lists from genes and counts
+nrow(filt$counts); nrow(filt$genes)
+```
+
+```{r}
+save(filt, file = here("03limma/DGElist_ob_limma_filt.RData"))
+```
+
+
+### voom normlisation
+
+```{r}
+norm = voom(filt, plot=T)
+```
+
+## Limma
+
+```{r}
+#head(norm$design)
+
+#set some factor levels
+norm$targets$group = paste(norm$targets$condition, norm$targets$donor, sep=".") #explicit
+#simplify names for intercepting
+norm$targets$group = gsub("subject","s", norm$targets$group)
+norm$targets$group = factor(gsub("eige|hite","", norm$targets$group))
+norm$targets$group
+design = model.matrix(~0 +frac_assigned_to_genes + group, data=norm$targets)
+colnames(design) = c("frac_assigned_to_genes",levels(norm$targets$group))
+head(design)
+```
+
+```{r}
+explicit_fit = lmFit(norm, design=design)
+coi = makeContrasts(s4 = b.s4- w.s4,
+                    s3 = b.s3 - w.s3,
+                    s2 = b.s2 - w.s2,
+                    s1 = b.s1 - w.s1,
+                    s6 = b.s6 - w.s6,
+                    s5 = b.s5 - w.s5,
+                      levels = design)
+cfit = contrasts.fit(explicit_fit, coi)
+efit = eBayes(cfit, robust=T)
+
+results= decideTests(efit, method="separate", adjust.method = "BH", p.value = 0.01)
+summary(results)
+```
+
+```{r}
+results= decideTests(efit, method="separate", adjust.method = "BH", p.value = 0.05)
+summary(results)
+vennDiagram(results[,1:4])
+vennDiagram(results[,c(3:6)])
+vennDiagram(results[,c(1:2,5:6)])
+```
+
+s4 has a small amount of independent genes, but not more than subject2.   
+
+
+## Upsets
+```{r}
+make_upset_table = function(res) {
+  library(UpSetR)
+
+  res= data.frame(res)
+  new_bin = matrix(NA,ncol=ncol(res)*2, nrow=nrow(res))
+  colnames(new_bin) = paste(rep(colnames(res),each=2), c("beige","white"), sep= "_")
+  rownames(new_bin) = rownames(res)
+  for (i in 1:nrow(res)){
+    jcount=0
+    for (j in 1:length(res[i,])){
+        nj = j + jcount
+        v = res[i,j]
+        if (v == 0){
+            new_bin[i,nj] = 0
+            new_bin[i,nj+1] = 0  
+        } else if (v == 1){
+            new_bin[i,nj] = 1
+            new_bin[i,nj+1] = 0
+        } else if (v == -1){
+            new_bin[i,nj] = 0
+            new_bin[i,nj+1] = 1
+        } else {print("Error")}
+        
+        jcount = jcount + 1
+    }
+  }
+  summary(new_bin)
+  new_bin = as.data.frame(new_bin)
+  #print(upset(new_bin,
+   #   order.by = "freq", nintersects=25))
+  return(new_bin)
+}
+```
+
+```{r}
+results_bin = make_upset_table(results)
+upset(results_bin,nsets=14,
+      order.by = "freq", nintersects=30, text.scale=1.5) 
+
+upset(results_bin[,grep("white", colnames(results_bin))],nsets=14,
+      order.by = "freq", nintersects=25, text.scale=1.5) 
+
+upset(results_bin[,grep("beige", colnames(results_bin))],nsets=14,
+      order.by = "freq", nintersects=25, text.scale=1.5) 
+```
+
+
+### Overall pvalue
+We can extract merely like this
+
+```{r}
+anytable = topTable(efit, number = Inf, adjust.method = "BH", 
+                    coef = c('s3','s4','s2','s1','s6','s5'))
+anytable$AvelogFC = rowMeans(anytable[c('s3','s4','s2','s1','s6','s5')])
+summary(anytable$adj.P.Val < 0.01) #much more conserative than previous tries
+```
+
+### Donor tables
+
+```{r}
+donortabs = list()
+donors = c('s3','s4','s2','s1','s6','s5')
+base_matrix = matrix(NA, dimnames = list(efit$genes$gene_name,donors), 
+                                     nrow = nrow(efit$genes), ncol=length(donors))
+donorlists = list(adj.p.val = base_matrix, logFC = base_matrix,  
+                  genes= efit$genes )
+for ( co in donors){
+  onedonor = topTable(efit, number = Inf, adjust.method = "BH", 
+                    coef = co)
+  donortabs[[co]] = onedonor
+  donorlists$adj.p.val[,co] = onedonor$adj.P.Val[order(onedonor$Geneid)]
+  donorlists$logFC[,co] = onedonor$logFC[order(onedonor$Geneid)]
+}
+summary(donortabs)
+```
+
+```{r}
+ann_cols = c("Geneid", "gene_name", "description")
+alltab = anytable[,!colnames(anytable) %in%c("ensembl_gene_id_version", "ID")]
+for (d in donors){
+  formatted = donortabs[[d]]
+  formatted = formatted[,c(ann_cols,"P.Value","adj.P.Val","AveExpr")]
+  alltab = merge(alltab, formatted, by=ann_cols,
+                 suffixes = c("",paste(".", d, sep="")))
+  alltab = alltab[!duplicated(alltab$gene_name),] #remove duplicates because they tend to propogate
+}
+head(alltab); nrow(alltab)
+
+summary(rowSums(alltab[,grep("adj.P.Val\\.s", colnames(alltab))] < 0.05) == 6)
+```
+
+We get a different number of significant genes than using decideTests because in order to extract the p.adjust for each contrast we have to forgo the p-value adjustment across contrasts.  
+
+```{r}
+logfc_cols = grep("^s[1-6]$", colnames(alltab))
+colnames(alltab)[logfc_cols] = paste0("logFC.", colnames(alltab)[logfc_cols])
+alltab = rename(alltab, all.donors.P.Value = P.Value,
+                all.donors.adj.P.Val = adj.P.Val,
+                all.donors.AvelogFC = AvelogFC)
+
+
+write.table(alltab, here("03limma/any_and_all_donor_DGE.tsv"),
+            sep="\t",quote=F, row.names = F)
+```
+
+
+## Pvalue histograms
+
+
+```{r}
+ggplot(anytable) + geom_histogram(aes(x=P.Value), binwidth = 0.005)
+```
+
+```{r}
+for (d in donors){
+  p = ggplot(donortabs[[d]]) + geom_histogram(aes(x=P.Value), binwidth = 0.005) + ggtitle(d)
+  print(p)
+}
+```
+
+
+## Volcano Plots
+
+```{r}
+ggplot(anytable, aes(x=AvelogFC, y=-log10(P.Value))) + 
+  geom_point(show.legend = F, size=0.75) +
+    geom_text_repel(data=anytable[anytable$AvelogFC > 5 |
+                                      anytable$AvelogFC < -2.75 |
+                                      anytable$adj.P.Val < 0.0001,],
+                    aes(label=gene_name))
+
+for ( d in donors){
+    tab =donortabs[[d]] 
+p = ggplot(tab, aes(x=logFC, y=-log10(P.Value))) + 
+  geom_point(show.legend = F, size=0.75) +  ggtitle(d) +
+    geom_text_repel(data=tab[tab$logFC > 5 |
+                              tab$logFC < -2.75 |
+                              tab$adj.P.Val < 0.0001,],
+                    aes(label=gene_name))
+
+print(p)
+}
+
+```
+
+## GO 
+
+```{r}
+molsig <- clusterProfiler::read.gmt(here("annotations/msigdb.v2023.1.Hs.symbols.gmt"))
+head(molsig); nrow(molsig)
+prefixes = c("HALLMARK", "KEGG","REACTOME", "WP", "GOBP", "GOCC","GOMF")
+colnames(molsig) = c("term","gene")
+some.molsig = molsig[gsub("_.*","", molsig$term) %in% prefixes,]
+some.molsig$term = factor(some.molsig$term)
+table(gsub("_.*","", some.molsig$term))
+rm(molsig)
+shorten = function(ont) {
+  abbreviate(gsub("_"," ", tolower(ont)),minlength=40, dot=T, named = F)
+}
+```
+
+## GO: Genes DE in ANY donor (n=5109)
+```{r}
+genes= anytable$gene_name[anytable$adj.P.Val < 0.001]
+any = enricher(genes,
+               universe = anytable$gene_name,
+            TERM2GENE = some.molsig)
+head(any)
+dotplot(any, showCategory = 20) + ggtitle (paste0("Any test; n=",  length(genes)))
+```
+
+```{r}
+head(results)
+decided = results[,donors]
+rownames(decided) = filt$genes$gene_name[order(rownames(decided))]
+head(decided); nrow(decided)
+ddf = as.data.frame(decided)
+ddf$str = paste0(ddf$s3,ddf$s4,ddf$s2,ddf$s1,ddf$s6,ddf$s5)
+
+contrasts = list(beige_all =  rownames(ddf)[grep("1{6}", ddf$str)],
+                 s2_beige = rownames(ddf)[grep("001000", ddf$str)],
+                 s4_6_beige = rownames(ddf)[grep("010010", ddf$str)],
+                 s4_beige = rownames(ddf)[grep("010000", ddf$str)],
+                 s6_beige = rownames(ddf)[grep("000010", ddf$str)],
+                 s5_beige = rownames(ddf)[grep("000001", ddf$str)],
+                 
+                 s4_6_5_beige = rownames(ddf)[grep("010011", ddf$str)],
+                 s3_s2_beige =rownames(ddf)[grep("101000", ddf$str)],
+                 
+                 s3_beige = rownames(ddf)[grep("100000", ddf$str)],
+                 beige_not9 = rownames(ddf)[grep("111011", ddf$str)],
+                 
+                 white_all = rownames(ddf)[grep("(-1){6}", ddf$str)],
+                 s2_white = rownames(ddf)[grep("00-1000", ddf$str)],
+                 s4_6_white = rownames(ddf)[grep("0-100-10", ddf$str)],
+                 s4_white = rownames(ddf)[grep("0-10000", ddf$str)],
+                 s6_white = rownames(ddf)[grep("0000-10", ddf$str)],
+                 s5_white =  rownames(ddf)[grep("00000-1", ddf$str)],
+                 
+                 s4_6_5_white = rownames(ddf)[grep("0-100-1-1", ddf$str)],
+                 s3_s2_white =rownames(ddf)[grep("-10-1000", ddf$str)],
+                 white_not9 = rownames(ddf)[grep("-1-1-10-1-1", ddf$str)],
+                 s3_white = rownames(ddf)[grep("-100000", ddf$str)]
+)
+                
+str(contrasts)
+```
+## GO for combinations of donors
+
+```{r}
+go_all = compareCluster(geneClusters = contrasts,
+                        fun = "enricher", 
+                        TERM2GENE = some.molsig,
+                        universe = anytable$gene_name)
+head(go_all)
+p = dotplot(go_all, showCategory =3, font.size=10) +  theme(axis.text.x = element_text(angle=45, hjust=1))  
+p + scale_y_discrete(labels=shorten(levels(p$data$Description)))
+```
+
+## GO beige in all donors
+Using the significance table rather than the results test because its more reproducible.  
+
+```{r}
+beige_all = alltab[rowSums(alltab[grep("adj.P.Val.s[1-6]", colnames(alltab))] < 0.05 ) == 6,]
+nrow(beige_all)
+
+go_beige_all = enricher(beige_all$gene_name,
+                        TERM2GENE = some.molsig,
+                        universe = anytable$gene_name)
+head(go_beige_all)
+p = dotplot(go_beige_all, showCategory =10, font.size=10) +  theme(axis.text.x = element_text(angle=45, hjust=1))  
+p
+```
+
+
+## FPKM tables
+
+```{r}
+lib_rpkm = data.frame(rpkm(filt, normalize.lib.sizes=TRUE))
+colnames(lib_rpkm) = paste(filt$samples$donor.condition, "_rep",filt$samples$rep, sep="")
+lib_rpkm = lib_rpkm[order(colnames(lib_rpkm))]
+
+format_rpkm = merge(filt$genes, lib_rpkm,  
+                    by.x="Geneid", by.y = 'row.names',sort=FALSE)
+head(format_rpkm)
+```
+
+
+```{r}
+rowMeans(format_rpkm[format_rpkm$gene_name == "PPARG",c(7:ncol(format_rpkm))]) #Average RPKM 36 
+plotRLE(data.matrix(format_rpkm[7:ncol(format_rpkm)]), outline=FALSE)  #check normalisation
+```
+
+```{r}
+write.table(format_rpkm, sep='\t', row.names = FALSE,quote = F,
+           file=here("03limma/beige_day15_rpkm_tmm.tab"))
+```
+
+
+```{r}
+library(tidyr)
+long = pivot_longer(format_rpkm, 7:ncol(format_rpkm), names_to = "biorep", values_to ="fpkm")
+long$donor = factor(gsub("\\..*", "", long$biorep), levels=unique(filt$samples$donor))
+long$condition = factor(gsub(".*\\.","", gsub("_rep.","", long$biorep)), levels=c("white","beige"))
+long$rep = gsub(".*_","", long$biorep)
+long$donor.condition = factor(paste(long$donor, long$condition, sep="."), 
+                              levels = paste(rep(levels(long$donor),each=2), rep(c("white","beige"), 6), sep="."))
+head(long)
+```
+
+```{r}
+long = group_by(long, Geneid) %>% mutate(zscore= scale(fpkm))
+head(long)
+ggplot(long[long$gene_name == "PPARG",]) + geom_bar(stat="summary",fun="mean", aes(x=donor.condition, y=fpkm, fill=condition)) + 
+  geom_point(aes(x=donor.condition, y=fpkm))
+```
+
+
+
+```{r}
+ggplot(long[long$gene_name == "PPARG",]) + geom_boxplot(aes(x=condition, y=fpkm)) + 
+  geom_jitter(aes(x=condition, y=fpkm, colour=donor), size=5)
+```
+
+
+```{r}
+save(long, file=here("03limma/rpkm_rep_for_plotting.RData"))
+```
+
+
+```{r}
+filt$samples$group = factor(filt$samples$donor.condition)
+group_rpkm = data.frame(rpkmByGroup(filt,normalize.lib.sizes=TRUE))
+
+colSums(group_rpkm)
+format_grpkm = merge(filt$genes, group_rpkm,  
+                    by.x="Geneid", by.y = 'row.names',sort=FALSE)
+head(format_grpkm)
+rowMeans(format_grpkm[format_grpkm$gene_name == "PPARG",c(7:ncol(format_grpkm))])#expr matches the replicate table
+```
+
+```{r}
+plotRLE(data.matrix(format_grpkm[7:ncol(format_grpkm)]), outline=FALSE)
+```
+
+```{r}
+write.table(format_grpkm, sep='\t', row.names = FALSE, quote=F,
+            file=here("03limma/beige_day15_rpkm_tmm_means.tab"))
+```
+
+
+

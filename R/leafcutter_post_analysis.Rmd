@@ -1,0 +1,221 @@
+---
+title: "leafcutter_post_analysis"
+output: html_document
+---
+
+GO and volcano plots 
+```{r message=FALSE, warning=FALSE}
+library(EnhancedVolcano, lib.loc=.libPaths()[-1])
+library(tidyr)
+library(clusterProfiler, lib.loc=.libPaths()[-1])
+here::i_am("R/leafcutter_post_analysis.Rmd")
+library(here)
+```
+
+
+```{r}
+leaf = read.delim(here("31_leafcutter","with_donor_info_leafcutter.txt"))
+dim(leaf)
+head(leaf)
+```
+
+Modifying plot for publication. Using raster for the points to make the file size smaller.  
+```{r}
+EnhancedVolcano(leaf, lab=leaf$genes, x="deltapsi", y="p", 
+                xlim=c(-0.7, 0.7), legendPosition = "right",
+                pCutoffCol = "p.adjust", pCutoff = 0.01,
+                FCcutoff = 0.1, ylab = "-log10 P value per cluster",
+                xlab="dPSI per junction", legendLabels = c("Not Sig", "dPSI", "p-value", "p-value and dPSI"),
+                raster = T,
+                selectLab = grep("CITED1|PPARG|PEMT|FAR2|^PC$|CA5BP",leaf$genes, value=T)
+                )
+ggsave(filename = here("R/plots", "volcanoplot.pdf"), width=8, height =7)
+
+EnhancedVolcano(leaf, lab=leaf$genes, x="deltapsi", y="p", 
+                xlim=c(-0.7, 0.7), legendPosition = "right",
+                pCutoffCol = "p.adjust", pCutoff = 0.01,
+                FCcutoff = 0.05, ylab = "-log10 P value per cluster",
+                xlab="dPSI per junction",  legendLabels = c("Not Sig", "dPSI", "p-value", "p-value and dPSI"))
+```
+## Exon switching events
+not for looking at on this dataset -> try leafviz output.  
+
+```{r}
+sig = filter(leaf, p.adjust < 0.05 & abs(deltapsi) > 0.1)
+head(table(sig$genes))
+```
+
+
+## Gene Ontology
+
+### Setup
+
+```{r}
+molsig <- clusterProfiler::read.gmt("C:/Users/sarahhp/OneDrive - Universitetet i Oslo/OUS/Data/annotations/msigdb_v2023.1.Hs_GMTs/msigdb.v2023.1.Hs.symbols.gmt")
+head(molsig); nrow(molsig)
+prefixes = c("HALLMARK", "KEGG","REACTOME", "WP", "GOBP", "GOCC","GOMF")
+colnames(molsig) = c("term","gene")
+some.molsig = molsig[gsub("_.*","", molsig$term) %in% prefixes,]
+some.molsig$term = factor(some.molsig$term)
+table(gsub("_.*","", some.molsig$term))
+rm(molsig)
+
+shorten = function(ont) {
+  abbreviate(gsub("_"," ", tolower(ont)),minlength=40, dot=T, named = F)
+}
+
+```
+
+### seperate gene clusters to gene names
+```{r}
+#robust = leaf[leaf$p.adjust < 0.05 & abs(leaf$deltapsi) > 0.1,]
+lc_genes = separate_rows(leaf, genes, sep=",")
+head(lc_genes)
+nrow(lc_genes)
+length(unique(lc_genes$genes))
+lc_genes = lc_genes[order(lc_genes$p.adjust),]
+```
+
+### Generic test
+
+```{r}
+go = enricher(unique(lc_genes$genes[lc_genes$p.adjust < 0.05 & abs(lc_genes$deltapsi) >= 0.1]),
+               universe = unique(lc_genes$genes),
+            TERM2GENE = some.molsig,
+            pvalueCutoff = 1, qvalueCutoff = 0.9)
+head(go)[3:9]
+```
+
+No significant terms but still a decent number of actin filament process genes have Diff splicing. Perhaps we need to run these separately.
+
+Write table to get genes lists
+```{r}
+to_print = go[,c("ID","GeneRatio", "BgRatio"  ,
+                  "pvalue"    ,  "p.adjust" ,   "qvalue"    ,  "geneID"   ,   "Count" )]
+write.table(to_print, here("31_leafcutter","General_GO_ORA.txt"))
+```
+
+
+using 5% deltapsi (bit more lenient)
+```{r}
+go = enricher(unique(lc_genes$genes[lc_genes$p.adjust < 0.05 & abs(lc_genes$deltapsi) >= 0.05]),
+               universe = unique(lc_genes$genes),
+            TERM2GENE = some.molsig,
+            pvalueCutoff = 1, qvalueCutoff = 0.9)
+head(go)[3:9]
+dotplot(go, showCategory=20)
+```
+
+
+### Separate databases
+
+```{r}
+colnames(go@result)
+custom_ora_to_df = function(res, annot=NULL, other_cols=NULL){
+    res_df = res[,c(other_cols,"ID","GeneRatio", "BgRatio"  ,
+                  "pvalue"    ,  "p.adjust" ,   "qvalue"    ,  "geneID"   ,   "Count" )]
+
+    print(dim(res_df))
+    if (length(annot)>1){
+        res_df = merge(res_df, annot, by.x="ID", by.y="term", sort=F)
+    }
+    
+    res_df = res_df[order(res_df$p.adjust),]
+    return(res_df)
+}
+
+```
+
+```{r}
+summary(go[,c(NULL, "ID")])
+```
+
+```{r}
+sep_go = list()
+gl = unique(lc_genes$genes[lc_genes$p.adjust < 0.05 & abs(lc_genes$deltapsi) >= 0.05])
+universe = unique(lc_genes$genes)
+for (db in prefixes){
+    print(db)
+    t2g = some.molsig[grep(db, some.molsig$term),]
+    ea = enricher(gl, universe= universe, TERM2GENE = t2g, pvalueCutoff = 1, qvalueCutoff = 0.5,minGSSize = 3)
+    df = custom_ora_to_df(ea)
+    print(head(df[1:8], n=10))
+    sep_go[[db]] = ea
+    #print(dotplot(ea, showCategory=20) +ggtitle(db))
+    #print(cnetplot(ea, geneSetID = 1:5) + ggtitle(db))
+}
+
+sig = dplyr::bind_rows(sep_go[["GOBP"]]@result, sep_go[["GOMF"]]@result, sep_go[["HALLMARK"]]@result, sep_go[["REACTOME"]]@result)
+sig = sig[order(sig$p.adjust),]
+head(sig)
+sig_ob = multienrichjam::enrichDF2enrichResult(sig)
+dotplot(sig_ob, color="qvalue", showCategory = 10)
+cnetplot(sig_ob, showCategory=3, categorySize="pvalue", color.params = list(edge=T))
+```
+
+
+
+```{r}
+sep_go = list()
+gl = unique(lc_genes$genes[lc_genes$p.adjust < 0.05 & abs(lc_genes$deltapsi) >= 0.1])
+universe = unique(lc_genes$genes)
+for (db in prefixes){
+    print(db)
+    t2g = some.molsig[grep(db, some.molsig$term),]
+    ea = enricher(gl, universe= universe, TERM2GENE = t2g, pvalueCutoff = 1, qvalueCutoff = 0.5,minGSSize = 3)
+    df = custom_ora_to_df(ea)
+    print(head(df[1:8], n=10))
+    sep_go[[db]] = ea
+    #print(dotplot(ea, showCategory=20) +ggtitle(db))
+    #print(cnetplot(ea, geneSetID = 1:5) + ggtitle(db))
+}
+```
+
+Only two datasets contain significant hits
+```{r}
+sig = dplyr::bind_rows(sep_go[["GOBP"]]@result, sep_go[["GOCC"]]@result)
+sig = sig[order(sig$p.adjust),]
+head(sig)
+
+sig_ob = multienrichjam::enrichDF2enrichResult(sig)
+dotplot(sig_ob, color="qvalue", showCategory = 3)
+barplot(sig_ob, showCategory = 3, color = "qvalue") + theme_bw(base_size = 18)
+ggsave(filename = here("R/plots", "geneontology.pdf"), width=8, height =3)
+cnetplot(sig_ob, showCategory=3, categorySize="pvalue", color.params = list(edge=T))
+```
+```{r}
+save(sig_ob, file = here("R/plots", "GO_object.RData"))
+```
+
+
+### Thermogenic test
+
+```{r}
+grep_sets = some.molsig[grep("THERMO|BROWN|UNCOUPLING|COLD", some.molsig$term),]
+from_rosi = some.molsig[grep("HALLMARK_FATTY_ACID_METABOLISM|HALLMARK_ADIPOGENESIS|GOBP_MONOCARBOXYLIC_ACID_METABOLIC_PROCESS|GOCC_MITOCHONDRIAL_MATRIX", some.molsig$term),]
+
+specific = enricher(unique(lc_genes$genes[lc_genes$p.adjust < 0.05 & abs(lc_genes$deltapsi) >= 0.1]),
+               universe = unique(lc_genes$genes),
+            TERM2GENE = rbind(grep_sets, from_rosi),
+            pvalueCutoff = 1, qvalueCutoff = 0.9)
+head(specific, n=20)[3:9]
+```
+
+Limiting our scope adipogenesis with 9 genes and FA metabolism with 7 terms are just significant.  
+
+```{r}
+emapplot(pairwise_termsim(specific))
+cnetplot(specific, showCategory=5)
+cnetplot(specific, showCategory=10)
+```
+
+```{r}
+save(specific, file = here("R/plots", "Themogenesis_object.RData"))
+
+terms = separate_longer_delim(as.data.frame(specific), cols = geneID, delim = "/") %>% select(ID, geneID)
+terms$ID = stringr::str_to_title(gsub("_"," ",terms$ID))
+
+write.table(terms, here("R/plots", "thermogenesis_network.txt"), sep="-", quote = F, row.names = F)
+```
+
+

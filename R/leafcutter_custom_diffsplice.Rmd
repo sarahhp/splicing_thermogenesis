@@ -1,0 +1,256 @@
+---
+title: "leafcutter_custom_diffsplice"
+output: html_document
+---
+
+activate leafcutter module before loading.  
+```{r}
+here::i_am("R/leafcutter_custom_diffsplice.Rmd")
+library(here)
+library(tidyr, lib.loc=.libPaths()[-1])
+library(leafcutter, lib.loc=.libPaths()[-1])
+```
+
+```{r}
+dir = "/home/sarahhp/home/rnaseq/six_donor_trans/output/31_leafcutter"
+exon_file = here("annotations/hg38_ensembl98.exons.txt.gz")
+
+counts=read.table(here("31_leafcutter/beige_splicing_perind_numers.counts.gz"), header=T, check.names = F)
+meta=read.table(here("31_leafcutter/beige_splicing_groups.txt"), header=F, stringsAsFactors = F)
+colnames(meta)=c("sample","group","donor")
+str(meta)
+```
+
+
+### Set up options
+```{r}
+opt = list(
+  min_samples_per_intron = 14, #(5 donors 2-3 reps)
+  min_coverage = 20,
+  min_samples_per_group = 12, #(4 donors x 3reps),
+  num_threads = 12,
+  timeout=30,
+  max_cluster_size=10000,
+  output_prefix = here("31_leafcutter/with_donor_info")
+)
+```
+
+
+```{r}
+counts=counts[,meta$sample]
+
+group_names=unique(meta$group) # keep order from groups_file unless numeric
+if (is.numeric(meta$group)) group_names=sort(group_names)
+meta$group=factor(meta$group, group_names)
+
+stopifnot(length(group_names)==2)
+
+cat("Encoding as",group_names[1],"=0,",group_names[2],"=1\n")
+numeric_x=as.numeric(meta$group)-1
+
+confounders=meta$donor
+if (ncol(meta)>2) {
+    confounders=meta[,3:ncol(meta),drop=F]
+    # scale continuous confounders
+    for (i in seq_len(ncol(confounders)))
+        if (is.numeric(confounders[,i]))
+            confounders[,i]=scale(confounders[,i])
+    # convert factors to one-of-K encoding
+    confounders=model.matrix( ~., data=confounders )
+    confounders=confounders[,2:ncol(confounders),drop=F] # remove intercept
+}
+confounders
+```
+
+
+```{r}
+minimum_group_size=min(sum(numeric_x==0),sum(numeric_x==1))
+if (minimum_group_size < opt$min_samples_per_intron)
+  stop("The number of samples in the smallest group is less than min_samples_per_intron, which means no clusters are testable. You can reduce min_samples_per_intron using the -i option, but note that we have only carefully checked the calibration of leafcutter p-values down to n=4 samples per group.")
+if (minimum_group_size < opt$min_samples_per_group)
+  stop("The number of samples in the smallest group is less than min_samples_per_group, which means no clusters are testable. You can reduce min_samples_per_intron using the -g option, but note that we have only carefully checked the calibration of leafcutter p-values down to n=4 samples per group.")
+
+
+```
+
+
+```{r}
+cat("Settings:\n")
+print(opt)
+cat("Running differential splicing analysis...\n")
+require(doMC)
+registerDoMC(opt$num_threads)
+
+results <- differential_splicing(counts, numeric_x, confounders=confounders, 
+                                 max_cluster_size=opt$max_cluster_size, 
+                                 min_samples_per_intron=opt$min_samples_per_intron, 
+                                 min_samples_per_group=opt$min_samples_per_group, 
+                                 min_coverage=opt$min_coverage, 
+                                 timeout=opt$timeout,)
+```
+
+
+```{r}
+# Make cluster table
+clusters          = cluster_results_table(results)
+clusters$cluster  = add_chr(clusters$cluster)
+```
+
+
+```{r}
+# Add gene names to clusters
+exons_table     = read.table(exon_file, header=T, stringsAsFactors = F)
+intron_meta     = get_intron_meta(rownames(counts))
+exons_table$chr = add_chr(exons_table$chr)
+intron_meta$chr = add_chr(intron_meta$chr)
+clu_gene_map    = map_clusters_to_genes(intron_meta, exons_table)
+clusters   = merge(clusters, clu_gene_map, by.x="cluster", by.y="clu", all.x=TRUE)
+```
+
+## Save raw files (machine useful)
+```{r}
+write.table(clusters, paste0(opt$output_prefix,"_cluster_significance.txt"), quote=F, sep="\t", row.names = F)
+```
+
+
+## Format clusters
+```{r}
+clusters = clusters[order(clusters$p.adjust),]
+clusters$chr = gsub(":.*","",clusters$cluster)
+clusters$cluster_id = gsub(".*:","", clusters$cluster)
+head(clusters)
+table(table(clusters$cluster_id))
+```
+
+PEMT cluster chr17:clu_19605_- is highly DE
+PEMT contains three expressed clusters.  
+The top cluster contains 8 different introns; probably this AF event.  Not a bad way of looking at it, as a event type.  
+
+```{r}
+clusters[grep("PEMT", clusters$genes),]
+```
+
+## Get effect sizes
+```{r }
+registerDoMC(opt$num_threads)
+effect_size                = leaf_cutter_effect_sizes(results)
+colnames(effect_size)[3:4] = group_names
+effect_size$intron = add_chr(effect_size$intron)
+```
+
+
+```{r save_effect_size}
+write.table(effect_size, paste0(opt$output_prefix,"_effect_sizes.txt"), quote=F, col.names = T, row.names = F, sep="\t")
+```
+
+
+Only 2 of these PEMT introns has a large delta PSI (>0.1); chr17:17577027:17591531 which is ensembl 201/202.  And our novel intron chr17:17577027:17577107:clu_19605_- has a positive 0.20 PSI.  
+Do the delta PSIs add to 1? 
+
+PPARG has many introns in this Diffspliced cluster; but chr3:12289134:12312380:clu_18227_+ decreases in beige by 16% and chr3:12351674:12379704:clu_18227_+ increases by 18% in beige
+
+```{r}
+effect_size = effect_size[order(effect_size$deltapsi),]
+effect_size = as.data.frame(effect_size)
+head(effect_size, n=6)
+effect_size[grep("clu_19605_-", effect_size$intron),]#PEMT
+pemt = effect_size[grep("clu_19605_-", effect_size$intron),]
+sum(pemt["deltapsi"]) #yep almost zero
+
+effect_size[grep("clu_18227_+", effect_size$intron),]#PPARG
+```
+
+
+
+```{r}
+effect_size$chr = gsub(":.*","",effect_size$intron)
+effect_size$cluster_id = gsub(".*:clu","clu", effect_size$intron)
+effect_size$intron_coords = gsub("chr..?:","",gsub(":clu_.*","",effect_size$intron))
+head(effect_size)
+combo = merge(effect_size, clusters, by=c("chr","cluster_id"))
+nrow(combo);nrow(effect_size)
+
+combo$score = -log10(combo$p.adjust) * abs(combo$deltapsi)
+summary(combo$score)
+combo = combo[order(combo$score, decreasing = T),]
+head(combo)
+```
+## Save knitted file (human-useful)
+
+```{r}
+write.table(combo, paste0(opt$output_prefix,"_leafcutter.txt"), quote=F, col.names = T, row.names = F, sep="\t")
+```
+
+```{r eval=F}
+make_differential_splicing_plot(t(counts[combo$p.adjust < 0.01,]), numeric_x, exons_table)
+```
+^ not sure that this works?  
+
+```{r}
+summary(combo$p.adjust < 0.05)#36 thousand exon excision events?!
+summary(combo$p.adjust < 0.01)
+summary(combo$p.adjust < 0.05 & abs(combo$deltapsi)> 0.1)#with a delta psi threshold though, we have only 693 which is manageable (phew!)
+summary(combo$p.adjust < 0.01 & abs(combo$deltapsi)> 0.1)
+```
+
+```{r}
+robust = combo[combo$p.adjust < 0.05 & abs(combo$deltapsi) > 0.1,]
+head(robust); nrow(robust); tail(robust, n=10)
+```
+
+```{r}
+robust = robust[order(robust$genes),c("genes","deltapsi","p.adjust","intron")]
+head(robust)
+
+summary(is.na(robust$genes)) #6 exons unable to be assigned to genes
+
+robust[grep("PEMT", robust$genes),]
+```
+Many of these events only involve one intron; Many involve 2 introns 
+
+```{r}
+table(table(robust$genes))
+table(robust$genes)[table(robust$genes) > 2]
+```
+
+## Differential expression
+```{r}
+de_file= here("03limma/any_and_all_donor_DGE.tsv")
+sig = read.delim(de_file)
+head(sig)
+all_sig = sig[rowSums(sig[grep("adj.P.Val.s[1-6]", colnames(sig))] < 0.05 ) == 6,]
+nrow(all_sig)
+all_sig = all_sig[order(all_sig$all.donors.adj.P.Val),]
+head(all_sig)
+```
+
+```{r}
+robust = robust[order(robust$p.adjust),]
+lc_genes = separate_rows(robust, genes, sep=",")
+head(lc_genes)
+nrow(lc_genes)
+length(unique(lc_genes$genes))
+```
+
+
+```{r}
+summary(unique(lc_genes$genes) %in% all_sig$gene_name) #41 genes are also sig
+lc_genes$is_DEG = lc_genes$genes %in% all_sig$gene_name
+head(lc_genes)
+```
+
+
+```{r}
+any_sig = sig[sig$adj.P.Val < 0.01,]
+nrow(any_sig)
+summary(unique(lc_genes$genes) %in% any_sig$gene_name)
+```
+
+
+```{r}
+summary(unique(lc_genes$genes) %in% any_sig$gene_name[abs(sig$all.donors.AvelogFC) > 1])
+summary(unique(lc_genes$genes) %in% any_sig$gene_name[abs(sig$all.donors.AvelogFC) > 0.5])
+summary(unique(lc_genes$genes) %in% any_sig$gene_name[abs(sig$all.donors.AvelogFC) > 0.1])
+```
+
+

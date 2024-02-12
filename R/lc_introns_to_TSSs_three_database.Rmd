@@ -1,0 +1,272 @@
+---
+title: "lc_introns_to_TSSs_three_database"
+output: html_document
+---
+
+
+Caveat: we can only assign 1st introns if the they are annotated to a transcript - here we add refseq and fantom cat annotations to the ensembl one.  
+Laminb version - also adding in ALL introns to get an accurate background
+
+```{r}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(readr)
+```
+
+```{r}
+figs = "/projects/imb-pkbphil/sp/rnaseq/six_donor_trans/R/leafcutter/plots"
+LEAF= "/projects/imb-pkbphil/sp/rnaseq/six_donor_trans/output/31_leafcutter"
+LEAF_INDEX = "/projects/imb-pkbphil/sp/annotations/"
+leaf_junctions = read.delim(file.path(LEAF,"annotation/three_database_info_all_junctions.tsv"))
+dim(leaf_junctions)
+head(leaf_junctions)
+```
+
+
+```{r}
+leaf_junctions = mutate(leaf_junctions, pot_first_intron = min_intron_number == 1)
+
+summary(leaf_junctions$min_intron_number)
+ggplot(leaf_junctions, aes(x=min_intron_number, fill=mode_intron_number==1)) + geom_bar()
+ggplot(leaf_junctions, aes(x=min_intron_number==1, fill=min_intron_number==1)) + geom_bar()
+leaf_junctions$pot_first_intron = factor(leaf_junctions$pot_first_intron, levels=c("TRUE","FALSE"))
+head(leaf_junctions)
+
+
+ggplot(filter(leaf_junctions, !is.na(pot_first_intron)),aes(x=pot_first_intron, fill=pot_first_intron)) + geom_bar()  +
+  labs(x="Is first exon junction?", y="Number of exon junctions") +
+         theme_bw(base_size=18) + theme(axis.ticks.x = element_blank(), panel.border = element_blank()) 
+ggsave(file.path(figs, "annotated_first_intron_barplot.pdf"))
+```
+
+
+## Get 1st exon coords for 1st introns
+per intron, could be several 1st exons/TSSs.  but thats okay, just log them here
+```{r}
+first_introns = filter(leaf_junctions, pot_first_intron==TRUE) %>% rename(intron_start = start, intron_end = end)
+nrow(first_introns)
+head(first_introns)
+table(first_introns$strand)
+```
+
+
+```{r}
+indexes = list(gencode="ensembl98/leafcutter_index/ensembl98_leafviz_all_exons.txt.gz", 
+               refseq = "refseq/leafcutter_index/refseq_2023_all_exons.txt.gz", 
+               fantom = "fantom_cat/hg38/leafcutter_index/fantom_cat.lv3_robust_all_exons.txt.gz")
+
+TSSes = list(gencode="ensembl98/leafcutter_index/gencode.v32.TSS.txt", 
+               refseq = "refseq/leafcutter_index/refseq_2023.TSS.txt", 
+               fantom = "fantom_cat/hg38/leafcutter_index/fantom_cat.lv3_robust.TSS.txt")
+
+load_index = function(filename, path){
+  index = read.delim(file.path(path, filename),
+                          col.names=c("chr","exon_start","exon_end","strand","gene"))
+  index = distinct(index)
+  print(nrow(index))
+  return(index)
+}
+
+load_TSS = function(filename, path){
+  tss = read.delim(file.path(path, filename), col.names = c("chr","TSS", "strand"))
+  tss = distinct(tss) 
+  print(nrow(tss))
+  return(tss)
+}
+#gencode = load_index(indexes$gencode, LEAF_INDEX)
+#gTSS = load_TSS(TSSes$gencode, LEAF_INDEX)
+```
+
+```{r}
+intron_to_TSS = function(first_introns, index_fn, tss_fn, path=LEAF_INDEX, use_gene=T){
+  exon_index = load_index(index_fn, path)
+  tss = load_TSS(tss_fn, path)
+  
+  if (use_gene){
+    pos_upexons = merge(exon_index, filter(first_introns,strand =="+"),  
+                    by.x=c("chr", "strand", "exon_end",  "gene"), 
+                    by.y=c("chr", "strand", "intron_start",  "gene"))
+  
+    neg_upexons = merge(exon_index, filter(first_introns,strand =="-"),  
+                    by.x=c("chr", "strand", "exon_start", "gene"), 
+                    by.y=c("chr", "strand", "intron_end",  "gene"))
+  } else if (!use_gene){
+    exon_index$gene = NULL
+    pos_upexons = merge(exon_index, filter(first_introns,strand =="+"),  
+                    by.x=c("chr", "strand", "exon_end"), 
+                    by.y=c("chr", "strand", "intron_start"))
+  
+    neg_upexons = merge(exon_index, filter(first_introns,strand =="-"),  
+                    by.x=c("chr", "strand", "exon_start"), 
+                    by.y=c("chr", "strand", "intron_end"))
+  }
+  
+  
+  first_exons = rbind(filter(pos_upexons,exon_start %in% tss$TSS),
+                    filter(neg_upexons, exon_end %in% tss$TSS) %>% rename(intron_end=intron_start))
+  
+  print(sprintf("all exons: %d\n only TSSes: %d",nrow(pos_upexons) + nrow(neg_upexons), nrow(first_exons)))
+  return(first_exons)
+}
+```
+
+```{r}
+gencode_TSSes = intron_to_TSS(filter(first_introns, annotation =="gencode"),
+                              indexes$gencode, TSSes$gencode, path=LEAF_INDEX)
+
+refseq_TSSes = intron_to_TSS(filter(first_introns, annotation =="refseq"),
+                              indexes$refseq, TSSes$refseq, path=LEAF_INDEX)
+filter(refseq_TSSes,gene == "PEMT")
+
+fantom_TSSes = intron_to_TSS(filter(first_introns, annotation =="fantom_cat"),
+                              indexes$fantom, TSSes$fantom, path=LEAF_INDEX,
+                             use_gene=F)
+
+all_first = bind_rows(gencode_TSSes, refseq_TSSes, fantom_TSSes)
+head(all_first)
+rm(gencode_TSSes, refseq_TSSes, fantom_TSSes)
+```
+
+
+```{r}
+tss_per_gene = filter(all_first, p.adjust < 0.05 & abs(deltapsi) >= 0.1) %>%
+    group_by( gene) %>% summarise(freq=n()) %>%
+    arrange(desc(freq))
+head(tss_per_gene)
+table(tss_per_gene$freq) #65 introns have 1 exon... and a couple of introns have more than 10 different exons!
+
+filter(tss_per_gene, grepl("(PPARG)|(PEMT)|(CITED1)", gene))
+```
+
+
+## select background and save first exon files
+
+```{r}
+all_first = unite(all_first, gene, cluster_id, intron_end, col="intron_id") %>% 
+    select(chr, exon_start, exon_end, intron_id, deltapsi, strand, p.adjust) %>% 
+    mutate(exon_start = exon_start -1) %>% #adjustment from gtf to bed coordinates  
+    arrange(chr, exon_start, exon_end)
+all_first = distinct(all_first)
+nrow(all_first)
+nrow(distinct(all_first[c("chr", "exon_start", "exon_end","strand")]))
+head(all_first)
+```
+
+```{r}
+head(all_first)
+write.table(all_first, file.path(LEAF, "histone_profile/new_TSS/lc_3db_all_first_exons.bed"), 
+             quote=F, sep="\t", row.names = F, col.names = F)
+```
+
+
+## TSS only
+
+```{r}
+all_TSSes = mutate(all_first, TSS_start = if_else(strand == "+", exon_start, exon_end-1),
+                    TSS_end = if_else(strand=="+", exon_start+1, exon_end)) %>%
+    select(chr, TSS_start, TSS_end, intron_id, deltapsi, strand, p.adjust) %>% 
+    arrange(chr, TSS_start, TSS_end)
+head(all_TSSes)
+```
+
+Collapse where multiples occur at the same exact location
+```{r}
+nrow(all_TSSes)
+nrow(distinct(all_TSSes[c("chr", "TSS_start", "TSS_end","strand")]))
+```
+
+### Filter to 1 junction = 1 TSS
+Pick the upstream TSS so we're consistent
+
+
+```{r}
+filter_TSS = function(strand, coords){
+    if (strand[1] == "+"){return (min(coords))
+        }else if (strand[1] == "-"){return(max(coords))}
+}
+
+tss_filt = group_by(all_TSSes, intron_id, deltapsi, p.adjust, strand, chr) %>% 
+    summarise(TSS_start= filter_TSS(strand, TSS_start),  TSS_end = filter_TSS(strand, TSS_end)) %>%
+    select(chr, TSS_start, TSS_end, intron_id, deltapsi, strand, p.adjust) %>% 
+    arrange(chr, TSS_start, TSS_end)
+
+nrow(tss_filt)
+head(tss_filt)
+```
+
+```{r}
+white = filter(tss_filt, deltapsi < -0.1 & p.adjust < 0.05); nrow(white)
+beige = filter(tss_filt, deltapsi > 0.1 & p.adjust < 0.05); nrow(beige)
+grep("PEMT|PPARG", beige$intron_id, value=T)
+grep("PEMT|PPARG", white$intron_id, value=T)
+head(beige)
+nrow(white)
+nrow(beige)
+length(unique(beige$intron_id))
+
+dups = beige$intron_id[duplicated(beige$intron_id)]
+beige[beige$intron_id %in% dups,] #the intron ids are only unique if we use the deltpsi as well
+```
+
+
+```{r}
+write.table(white, file.path(LEAF, "histone_profile/new_TSS/lc_3db_white_TSSes.bed"), 
+            quote=F, sep="\t", row.names = F, col.names = F)
+write.table(beige, file.path(LEAF, "histone_profile/new_TSS/lc_3db_beige_TSSes.bed"), 
+             quote=F, sep="\t", row.names = F, col.names = F)
+```
+
+## Not-significant TSSes
+### Minus DEGs
+```{r}
+deg = read.delim("/projects/imb-pkbphil/sp/rnaseq/six_donor_trans/output/03limma/any_and_all_donor_DGE.tsv")
+d13_deg = filter(deg,adj.P.Val.d13 < 0.01)
+is_deg = function(intron_id){
+    gene = gsub("_.*","",intron_id)
+    res = gene %in% d13_deg$gene_name
+    return (res)
+    }
+
+nrow(tss_filt)
+not_sig = filter(tss_filt, p.adjust > 0.05 & abs(deltapsi) < 0.1 & !is_deg(intron_id))
+nrow(not_sig)#expressed, but not DSG or DEG in donor13
+
+not_sig[grep("PEMT",not_sig$gene),]
+write.table(not_sig, file.path(LEAF, "histone_profile/new_TSS/lc_3db_not_sig_TSSes.bed"), 
+             quote=F, sep="\t", row.names = F, col.names = F)
+```
+
+
+## TSS -2kb/+500b 
+
+```{r}
+promoters = mutate(.keep="none",
+                   all_TSSes, chr, 
+                   promoter_start=if_else(strand == "+", TSS_start-2000, TSS_end-500),
+                   promoter_end =if_else(strand=="+",TSS_start+500, TSS_end+2000), 
+                   intron_id, deltapsi,strand, p.adjust) %>%
+    select(chr, promoter_start, promoter_end, intron_id, deltapsi,strand, p.adjust) %>% 
+    arrange(chr, promoter_start, promoter_end, strand)
+head(promoters)
+tail(promoters)
+
+#Convert coords to strings to avoid sci notation (bedtools won't have it)
+promoters = mutate(promoters, promoter_start = format(promoter_start, scientific=F, trim=T),
+                   promoter_end = format(promoter_end, scientific=F, trim=T))
+```
+
+```{r}
+white_promoters = filter(promoters, p.adjust < 0.05 & deltapsi <= -0.1) 
+nrow(white_promoters)
+beige_promoters = filter(promoters, p.adjust < 0.05 & deltapsi >= 0.1) 
+nrow(beige_promoters)
+```
+
+```{r}
+write_tsv(white_promoters, file.path(LEAF, "promoter_binding/lc_3db_white_promoters.bed"), 
+         col_names=F)
+write_tsv(beige_promoters, file.path(LEAF, "promoter_binding/lc_3db_beige_promoters.bed"), 
+             col_names = F)
+```
+

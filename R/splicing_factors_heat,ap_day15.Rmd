@@ -1,0 +1,153 @@
+---
+title: "splicing_factors_heatmap_day15"
+output: html_document
+date: "2023-10-20"
+---
+
+```{r}
+library(tidyr)
+library(dplyr)
+library(ComplexHeatmap)
+library(clusterProfiler)
+library(here)
+here::i_am("R/splicing_factors_heat,ap_day15.Rmd")
+```
+
+
+```{r}
+rpkm = read.delim(here("03limma", "beige_day15_rpkm_tmm_means.tab"))
+head(rpkm)
+```
+
+
+set up heatmap matrices
+```{r}
+rpkm$gene_name[duplicated(rpkm$gene_name)]
+rpkm = rpkm[!duplicated(rpkm$gene_name),]
+rownames(rpkm) = rpkm$gene_name
+rmat = rpkm[,grep("beige|white", colnames(rpkm))]
+tail (rmat)
+norm = t(scale(t(rmat)))
+tail(norm)
+```
+
+## Get splicing factors
+
+```{r}
+molsig <- clusterProfiler::read.gmt(here("annotations/msigdb.v2023.1.Hs.symbols.gmt"))
+head(molsig); nrow(molsig)
+
+prefixes = c("HALLMARK", "KEGG","REACTOME", "WP", "GOBP", "GOCC","GOMF")
+colnames(molsig) = c("term","gene")
+some.molsig = molsig[gsub("_.*","", molsig$term) %in% prefixes,]
+some.molsig$term = factor(some.molsig$term)
+table(gsub("_.*","", some.molsig$term))
+```
+
+```{r}
+reg_rnasplice = some.molsig$gene[grep("GOBP_REGULATION_OF_RNA_SPLICING", some.molsig$term)]
+head(reg_rnasplice, n=50)
+summary(reg_rnasplice %in% rpkm$gene_name) #24 unexpressed
+```
+
+regulation of RNA splicing looks like a decent list; but perhaps the splicing paper have some more specific/curated checking ones ... Castella shows reactome mRNA splicing; 212 genes  And then checks 47 "representative" spliceaid genes; though they list 71 proteins in the paper abstract.  the site is incredibly slow, http://www.introni.it/splicing.html Tissue specific search tool also exists: http://193.206.120.249/splicing_tissue.html
+
+```{r}
+splicing_proteins = read.delim(here("annotations", "SpliceAidF_Table1.csv"), sep = ";")
+head(splicing_proteins)
+splicing_proteins$no_punct = gsub("[ /]", "", splicing_proteins$Splicing.factor)
+splicing_proteins$no_punct = gsub("Nova-", "NOVA", splicing_proteins$no_punct)
+splicing_proteins
+splicing_genes = HGNChelper::checkGeneSymbols(splicing_proteins$no_punct)
+
+splicing_genes$gene_name = splicing_genes$Suggested.Symbol
+splicing_genes$gene_name[splicing_genes$x == "CUG-BP1"] = "CELF1" #genecards 
+splicing_genes$gene_name[splicing_genes$x == "hnRNPE1"] = "PCBP1" #genecards
+splicing_genes$gene_name[splicing_genes$x == "hnRNPI(PTB)"] = "PTBP1" #genecards
+splicing_genes$gene_name[splicing_genes$x == "hnRNPP(TLS)"] = "FUS" #genecards
+splicing_genes$gene_name[splicing_genes$x == "HTra2?"] = "TRA2A" #genecards
+splicing_genes$gene_name[splicing_genes$x == "HTra2?1"] = "TRA2B" #genecards
+splicing_genes$gene_name[splicing_genes$x == "PSF"] = "SFPQ" #genecards to check which
+splicing_genes$gene_name[splicing_genes$x == "SF2ASF"] ="SRSF1"
+splicing_genes$gene_name[splicing_genes$x == "TDP43"] = "TARDBP" #genecards
+splicing_genes = separate_rows(splicing_genes, gene_name, sep=" /// ")
+splicing_genes
+```
+9G8, both are possible, separate rows
+
+C1/c2 here are just one gene by the looks, which is already included, same with hnrnpd0
+
+couldn't find any mention of hnrnpJ, all that came up was k.  
+
+hnRNPP - aka TLS, aka FUS, aka hnrnpP-P2
+the text format doesn't like the alpha and beta
+
+SF2/asf= SRSF1
+```{r}
+spliceaid = splicing_genes$gene_name[!is.na(splicing_genes$gene_name)]
+length(spliceaid)
+
+summary(spliceaid %in% rownames(norm)) #not all are expressed
+spliceaid[!spliceaid %in% rownames(norm)]
+```
+
+```{r}
+#elavl2 for e.g. has ensemblid ENSG00000107105
+summary("ENSG00000107105" == rpkm$Geneid)
+summary("ENSG00000104967" == rpkm$Geneid) #NOVA2 not expressed
+summary("ENSG00000139910" == rpkm$Geneid) #NOVA1 is expressed.  
+```
+## Check DE
+
+```{r}
+sig = read.delim(here("03limma","any_and_all_donor_DGE.tsv"))
+colnames(sig)
+all_sig = sig$gene_name[rowSums(sig[startsWith(colnames(sig), "adj.P.Val.d")] < 0.05) == 6]
+length(all_sig)
+  
+any_sig = sig$gene_name[sig$adj.P.Val < 0.01] 
+length(any_sig)
+```
+
+
+```{r}
+summary(reg_rnasplice %in% all_sig) #NONE are sig in all donors
+summary(reg_rnasplice %in% any_sig) #only 43 are significant in any donor
+43/157 #only 30% of expressed factors are DE in any donor
+```
+
+```{r}
+summary(spliceaid %in% all_sig) #NONE are sig in all donors
+summary(spliceaid %in% any_sig) #only 14 are significant in any donor
+```
+
+
+
+## Heatmaps 
+
+```{r}
+Heatmap(norm[rownames(norm) %in% reg_rnasplice,])
+
+Heatmap(norm[rownames(norm) %in% spliceaid,])
+```
+
+
+```{r}
+hm = Heatmap(norm[rownames(norm) %in% c(reg_rnasplice, "UCP1") &
+               rownames(norm) %in% any_sig,], height=5)
+hm
+
+pdf(here("R/plots", "reg_rnasplice_factors_any_sig.pdf"), width=5, height=7)
+hm
+dev.off
+
+Heatmap(norm[rownames(norm) %in% c(spliceaid, "UCP1") &
+               rownames(norm) %in% any_sig,])
+```
+
+
+```{r}
+sig[sig$gene_name == "QKI",]
+```
+
+
