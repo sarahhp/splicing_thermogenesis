@@ -1,0 +1,131 @@
+---
+title: "castella_overlap_lc"
+output: pdf_document
+date: "2024-01-19"
+---
+
+Supplementary Figure 4
+
+```{r message=FALSE, warning=FALSE}
+library(readxl)
+library(tidyr)
+library(dplyr)
+library(biomaRt)
+library(here); i_am("R/18_castella_overlap.Rmd")
+```
+
+
+```{r}
+castella = read_excel(here("annotations/Castella2023/Castella_etal_2023_Supplementary_Table_1_DiffTrans.xlsx"),
+                         sheet="isoforms-de")
+#castella = read.delim(file.path(other_data, "comparison_to_castella_etal_2023.txt"))
+head(castella)
+str(castella$TranscriptID)
+length(unique(castella$TranscriptID))
+```
+
+loading leafcutter ensembl transcripts
+```{r}
+junctions = read.delim(here("31_leafcutter/three_database_info_sig_junctions.tsv"))
+
+nrow(junctions)
+length(unique(junctions$gene)) #missing ~8 genes with unknown gene names
+length(unique(junctions$transcript_ids))
+head(junctions)
+
+lc_trans = separate_longer_delim(junctions, transcript_ids, delim = ",")
+head(lc_trans)
+nrow(lc_trans)
+length(unique(lc_trans$transcript_ids))
+length(unique(grep("^ENS", lc_trans$transcript_ids)))
+
+lc_trans$transcript_ids = gsub("\\..*","", lc_trans$transcript_ids)
+```
+
+
+```{r}
+library(biomaRt)
+mart <- useMart(biomart = "ensembl",
+  dataset = "hsapiens_gene_ensembl",
+   host = "https://sep2019.archive.ensembl.org")
+
+annot = getBM(c("external_gene_name", "ensembl_gene_id", "ensembl_transcript_id", "external_transcript_name"), 
+              filters = "ensembl_transcript_id",
+              values =  castella$TranscriptID,
+              mart = mart, useCache = F)
+
+head(annot, n=2); dim(annot)
+
+#Tidying up the annot table
+colnames(annot)[1] = "gene_name"
+
+#Add gene names to filt_series
+castella = merge(annot, castella, by.y= "TranscriptID", 
+                        by.x = "ensembl_transcript_id", sort=FALSE)
+#head(tpm)
+remove(annot)
+```
+
+
+```{r}
+nrow(castella) #6 transcripts cannot be found by ensembl
+head(castella)
+```
+```{r}
+summary(castella$ensembl_transcript_id %in% lc_trans$transcript_ids)
+castella[castella$ensembl_transcript_id %in% lc_trans$transcript_ids,]
+```
+
+```{r}
+lc_trans[lc_trans$transcript_ids %in% castella$ensembl_transcript_id,]
+lc_trans$gene = gsub(",.*","", lc_trans$gene)
+```
+
+
+castella 
+ensembl_transcript_id log2FoldChange direction (white|beige)
+
+```{r}
+castella = mutate(castella, condition = if_else(log2FoldChange > 0, "beige",  "white"))
+castella[grep("CKMT", castella$gene_name), ] #double checking logfc direction check
+```
+
+
+lc_trans
+transcript_ids deltapsi condition (white|beige)
+
+```{r}
+head(lc_trans)
+both = merge(lc_trans[c("gene","transcript_ids", "deltapsi","condition")], 
+             castella[c("gene_name","ensembl_transcript_id", "external_transcript_name","log2FoldChange","condition")],
+             by.x=c("gene","transcript_ids"), by.y= c("gene_name","ensembl_transcript_id"), 
+      all = T, suffixes = c(".hp",".castella"))
+head(both)
+
+nar = both[!is.na(both$condition.hp) & !is.na(both$condition.castella),]
+nar
+```
+
+
+```{r}
+freq = group_by(both, condition.hp, condition.castella) %>% count()
+freq
+```
+
+```{r}
+library(ggplot2)
+library(ggrepel)
+
+ggplot(nar) + geom_text(aes(x=deltapsi, y=log2FoldChange, label=gene)) + geom_hline(aes(yintercept=0)) + geom_vline(aes(xintercept=0))
+ggplot(nar) + geom_text_repel(aes(x=condition.hp, y=condition.castella, label=gene))
+```
+```{r}
+nar = pivot_longer(nar, c("condition.hp", "condition.castella"), names_to="dataset", values_to= "condition")
+head(nar)
+nar = mutate(nar, difference = if_else(dataset == "condition.hp", deltapsi, log2FoldChange))
+
+ggplot(nar, aes(x=difference, fill=dataset, y=gene)) + geom_bar(stat='identity', position="dodge") + geom_vline(aes(xintercept=0))
+
+ggplot(nar, aes(x=difference, fill=dataset, y=gene)) + geom_bar(stat='identity', position="dodge") + geom_vline(aes(xintercept=0)) + facet_wrap(~dataset, scales = "free_x")
+```
+

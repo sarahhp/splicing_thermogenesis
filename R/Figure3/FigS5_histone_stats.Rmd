@@ -1,0 +1,227 @@
+---
+title: "histone_stats_Fig_S5"
+output: pdf_document
+---
+
+```{r message=FALSE, warning=FALSE}
+library(tidyr)
+library(dplyr)
+library(ggplot2)
+library(ggpubr)
+library(ggrepel)
+library(here); i_am("R/Figure3/FigS5_histone_stats.Rmd")
+```
+## H3K27ac 
+
+```{r}
+histone = "H3K27ac"
+window = "1000:1000"
+tss_sets = c("beige","white","not_sig")
+
+enrich_tables = list()
+for (set in tss_sets){
+  file = here("31_leafcutter/histone_profile", histone, paste0("window", window), paste0(set,".",window, "_white_beige.tab"))
+  annot = read.delim(file, quote="'")
+  colnames(annot)[grep("chr", colnames(annot))] = "chr"
+  annot$tss_set = set
+  enrich_tables[[set]] = annot
+}
+str(enrich_tables)
+
+annot <- do.call(rbind, enrich_tables)
+table(annot$tss_set)
+head(annot); nrow(annot)
+```
+
+```{r}
+long = pivot_longer(annot, grep("Adi.",colnames(annot)), names_to = "context", values_to = "mean_enrichment")
+long$context = factor(long$context, levels=c("White_Adi.","Beige_Adi."))
+long$tss_set = factor(long$tss_set, levels=c("white","beige","not_sig"))
+```
+
+
+```{r}
+relative = long %>% group_by(context) %>% mutate(zscore = scale(mean_enrichment), group=paste0(context, tss_set))
+relative$group = factor(relative$group, levels=paste0(rep(levels(relative$context),each=3), levels(relative$tss_set)))
+
+ggplot(relative, 
+       aes(fill=tss_set, y=zscore, x=context, group=group)) + geom_violin() +
+    geom_boxplot(fill=NA, width=0.5, position= position_dodge(0.9)) + scale_fill_manual(values= c("dodgerblue","orange","grey")) +
+    theme_classic(base_size=18) + ylab("Relative Enrichment") + ggtitle(histone)
+ggsave(here("31_leafcutter/histone_profile", histone, paste0(histone, "_violin_plot.pdf")))
+
+ggplot(relative, 
+       aes(x=tss_set, y=zscore, fill=context, group=group)) + geom_violin() +
+    geom_boxplot(fill=NA, width=0.5, position= position_dodge(0.9))+scale_fill_manual(values= c("dodgerblue","orange")) +
+  theme_classic() + ylab("Relative Enrichment")+ ggtitle(histone)
+
+```
+
+
+```{r}
+summary(aov(zscore ~tss_set*context, data=relative))
+
+
+compare_means(zscore ~ tss_set, data=relative, method="wilcox.test", group.by="context")
+```
+
+## upstream H3K4me1
+
+```{r}
+histone = "H3K4me1"
+window = "2000:-250"
+tss_sets = c("beige","white","not_sig")
+
+enrich_tables = list()
+for (set in tss_sets){
+  file = here("31_leafcutter/histone_profile", histone, paste0("window", window), paste0(set,".",window, "_white_beige.tab"))
+  annot = read.delim(file, quote="'")
+  colnames(annot)[grep("chr", colnames(annot))] = "chr"
+  annot$tss_set = set
+  enrich_tables[[set]] = annot
+}
+str(enrich_tables)
+
+annot <- do.call(rbind, enrich_tables)
+table(annot$tss_set)
+head(annot); nrow(annot)
+```
+
+```{r}
+long = pivot_longer(annot, grep("Adi.",colnames(annot)), names_to = "context", values_to = "mean_enrichment")
+long$context = factor(long$context, levels=c("White_Adi.","Beige_Adi."))
+long$tss_set = factor(long$tss_set, levels=c("white","beige","not_sig"))
+```
+
+
+```{r}
+relative = long %>% group_by(context) %>% mutate(zscore = scale(mean_enrichment), group=paste0(context, tss_set))
+relative$group = factor(relative$group, levels=paste0(rep(levels(relative$context),each=3), levels(relative$tss_set)))
+
+ggplot(relative, 
+       aes(fill=tss_set, y=zscore, x=context, group=group)) + geom_violin() +
+    geom_boxplot(fill=NA, width=0.5, position= position_dodge(0.9)) + scale_fill_manual(values= c("dodgerblue","orange","grey")) +
+    theme_classic(base_size=18) + ylab("Relative Enrichment") + ggtitle(histone)
+ggsave(here("31_leafcutter/histone_profile", histone, paste0(histone, "_upstream_violin_plot.pdf")))
+
+ggplot(relative, 
+       aes(x=tss_set, y=zscore, fill=context, group=group)) + geom_violin() +
+    geom_boxplot(fill=NA, width=0.5, position= position_dodge(0.9))+scale_fill_manual(values= c("dodgerblue","orange")) +
+  theme_classic() + ylab("Relative Enrichment")+ ggtitle(histone)
+
+```
+
+
+```{r}
+summary(aov(zscore ~tss_set*context, data=relative))
+
+compare_means(zscore ~ tss_set, data=relative, method="wilcox.test", group.by="context")
+```
+
+## downstream H3K4me1
+
+```{r}
+histone = "H3K4me1"
+window = "-500:4000"
+tss_sets = c("beige","white","not_sig")
+
+enrich_tables = list()
+for (set in tss_sets){
+  file = here("31_leafcutter/histone_profile", histone, paste0("window", window), paste0(set,".",window, "_white_beige.tab"))
+  annot = read.delim(file, quote="'")
+  colnames(annot)[grep("chr", colnames(annot))] = "chr"
+  annot$tss_set = set
+  enrich_tables[[set]] = annot
+}
+str(enrich_tables)
+
+annot <- do.call(rbind, enrich_tables)
+table(annot$tss_set)
+head(annot); nrow(annot)
+```
+
+```{r}
+long = pivot_longer(annot, grep("Adi.",colnames(annot)), names_to = "context", values_to = "mean_enrichment")
+long$context = factor(long$context, levels=c("White_Adi.","Beige_Adi."))
+long$tss_set = factor(long$tss_set, levels=c("white","beige","not_sig"))
+```
+
+
+```{r}
+relative = long %>% group_by(context) %>% mutate(zscore = scale(mean_enrichment), group=paste0(context, tss_set))
+relative$group = factor(relative$group, levels=paste0(rep(levels(relative$context),each=3), levels(relative$tss_set)))
+
+ggplot(relative, 
+       aes(fill=tss_set, y=zscore, x=context, group=group)) + geom_violin() +
+    geom_boxplot(fill=NA, width=0.5, position= position_dodge(0.9), outlier.shape = NA) + scale_fill_manual(values= c("dodgerblue","orange","grey")) +
+    theme_classic(base_size=18) + ylab("Relative Enrichment") + ggtitle(paste(histone,window))
+ggsave(here("31_leafcutter/histone_profile", histone, paste0(histone, "_downstream_violin_plot.pdf")))
+
+ggplot(relative, 
+       aes(x=tss_set, y=zscore, fill=context, group=group)) + geom_violin() +
+    geom_boxplot(fill=NA, width=0.5, position= position_dodge(0.9))+scale_fill_manual(values= c("dodgerblue","orange")) +
+  theme_classic(base_size=18) + ylab("Relative Enrichment")+ ggtitle(paste(histone, window))
+
+```
+
+
+```{r}
+summary(aov(zscore ~tss_set*context, data=relative))
+compare_means(zscore ~ tss_set, data=relative, method="wilcox.test", group.by="context")
+```
+
+
+## H3K27me3
+
+```{r}
+histone = "H3K27me3"
+window = "2000:2000"
+tss_sets = c("beige","white","not_sig")
+
+enrich_tables = list()
+for (set in tss_sets){
+  file = here("31_leafcutter/histone_profile", histone, paste0("window", window), paste0(set,".",window, "_white_beige.tab"))
+  annot = read.delim(file, quote="'")
+  colnames(annot)[grep("chr", colnames(annot))] = "chr"
+  annot$tss_set = set
+  enrich_tables[[set]] = annot
+}
+str(enrich_tables)
+
+annot <- do.call(rbind, enrich_tables)
+table(annot$tss_set)
+head(annot); nrow(annot)
+```
+
+```{r}
+long = pivot_longer(annot, grep("Adi.",colnames(annot)), names_to = "context", values_to = "mean_enrichment")
+long$context = factor(long$context, levels=c("White_Adi.","Beige_Adi."))
+long$tss_set = factor(long$tss_set, levels=c("white","beige","not_sig"))
+```
+
+
+
+```{r}
+relative = long %>% group_by(context) %>% mutate(zscore = scale(mean_enrichment), group=paste0(context, tss_set))
+relative$group = factor(relative$group, levels=paste0(rep(levels(relative$context),each=3), levels(relative$tss_set)))
+
+ggplot(relative, 
+       aes(fill=tss_set, y=zscore, x=context, group=group)) + geom_violin() +
+    geom_boxplot(fill=NA, width=0.5, position= position_dodge(0.9)) + scale_fill_manual(values= c("dodgerblue","orange","grey")) +
+    theme_classic(base_size=18) + ylab("Relative Enrichment") + ggtitle(histone)
+ggsave(here("31_leafcutter/histone_profile", histone, paste0(histone, "_violin_plot.pdf")))
+
+ggplot(relative, 
+       aes(x=tss_set, y=zscore, fill=context, group=group)) + geom_violin() +
+    geom_boxplot(fill=NA, width=0.5, position= position_dodge(0.9))+scale_fill_manual(values= c("dodgerblue","orange")) +
+  theme_classic() + ylab("Relative Enrichment")+ ggtitle(histone)
+
+```
+
+
+```{r}
+summary(aov(zscore ~tss_set*context, data=relative))
+compare_means(zscore ~ tss_set, data=relative, method="wilcox.test", group.by="context")
+```
+
+

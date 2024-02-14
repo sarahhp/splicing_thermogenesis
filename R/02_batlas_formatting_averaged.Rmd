@@ -1,0 +1,196 @@
+---
+title: "batlas_formatting_averaged_take_2"
+author: "Sarah Hp"
+date: '2022-09-02'
+output: html_document
+---
+
+```{r}
+here::i_am("R/02_batlas_formatting_averaged_take2.Rmd")
+library(dplyr)
+library(ggplot2)
+library(here)
+figs = here("R/plots")
+```
+
+
+Now adding a BATLAS heatmap
+
+```{r}
+fpkm = read.delim(here("03limma/beige_day15_rpkm_tmm_means.tab"))
+head(fpkm)
+markrs = read.delim(here("annotations/batlas_MarkersList_V1.txt"))
+head(markrs)
+```
+
+Remove duplicate IDs + remove additional columns
+```{r}
+fpkm = fpkm[!duplicated(fpkm$Geneid),c(1,6:ncol(fpkm))]
+dim(fpkm)
+```
+check marker genes are in list
+```{r}
+summary(markrs$human %in% fpkm$Geneid)
+length(markrs$human)
+```
+
+## BATLAS Heatmap
+
+```{r}
+library(ComplexHeatmap)
+
+ma = merge(fpkm, markrs, by.x="Geneid", by.y="human")
+nrow(ma)
+head(ma)
+rownames(ma) = ma$geneid
+ma = as.matrix(ma[3:(ncol(ma)-3)])
+#head(ma)
+```
+
+```{r}
+sm = scale(t(ma))
+#head(sm)
+```
+and if we can annotate from the original
+
+```{r}
+scales::show_col(c("#74B2CD", "#C1A486", "sienna4","grey75"))
+```
+
+
+```{r}
+markrs = markrs[order(markrs$geneid),]
+head(markrs)
+bvw = HeatmapAnnotation(marker_for=markrs$marker.type[order(markrs$geneid)], 
+                        col = list(marker_for=c("brown"="sienna4", "white"="grey75")))
+plot(bvw)
+
+head(colnames(sm))
+# sort for annotation
+sm = sm[,order(colnames(sm))]
+```
+
+
+Add a rowannotation
+
+```{r}
+treat = gsub(".*\\.","",row.names(sm))
+treat[treat == "b"] = "beige"
+treat[treat == "w"] = "white"
+treat
+
+treatann = rowAnnotation(treat=treat, col=list(treat =c(white="#74B2CD",beige="#C1A486")),
+                         annotation_name_side = "top")
+draw(treatann)
+```
+
+
+
+### Filter on significance
+
+```{r}
+sig = read.delim(here( "03limma/any_and_all_donor_DGE.tsv"))
+head(sig)
+any_sig = sig[sig$all.donors.adj.P.Val < 0.01,]
+nrow(any_sig)
+summary(markrs$human %in% any_sig$Geneid)
+summary(sig$all.donors.adj.P.Val[sig$Geneid[sig$all.donors.adj.P.Val > 0.01] %in%  markrs$human]) 
+markrs[markrs$human %in% sig$Geneid[sig$all.donors.adj.P.Val > 0.01] ,] #21 BATLAS gene are not DE, they include:
+
+table(markrs$marker.type)
+table(markrs$marker.type[!markrs$human %in% any_sig$Geneid])
+```
+Hmm since half of the non-differential genes are white, I'd like to show that...
+
+```{r}
+rownames(sm) = gsub("subject","S", rownames(sm))
+is_sig = HeatmapAnnotation(marker_for=markrs$marker.type[order(markrs$geneid)],
+                           DiffExpr=markrs$human %in% any_sig$Geneid, 
+                        col = list(DiffExpr=c("TRUE"="forestgreen", "FALSE"="black"),
+                                   marker_for=c("brown"="sienna4", "white"="grey75")))
+```
+
+
+
+```{r}
+Heatmap(sm, bottom_annotation = is_sig, name="Relative \nGene \nExpression \n(FPKM)", 
+             right_annotation = treatann, column_title_side ="top",
+           column_split = markrs$marker.type)
+```
+
+## Take out non-DE genes and white markers
+
+```{r}
+sm = t(sm)
+sm = sm[markrs$geneid[markrs$marker.type == "brown"],]
+nrow(sm)
+nrow(any_sig)
+sm = sm[rownames(sm) %in% any_sig$gene_name,]
+nrow(sm)
+
+donann = HeatmapAnnotation(subject = gsub(".*_","",colnames(sm)))
+treatann = HeatmapAnnotation(treat=treat,
+                                  subject = gsub(".*_","",colnames(sm)),
+                             col=list(treat =c(white="#74B2CD",beige="#C1A486")))
+```
+
+
+```{r}
+donors = c("S1","S3","S4","S5","S6","S2")
+Heatmap(sm,name="Relative \nGene \nExpression \n(FPKM)", 
+             bottom_annotation = treatann, column_title_side ="top", 
+          column_order =  paste( c(rev(donors), donors),  sep=".", rep(c("white","beige"),each=6)),
+)
+```
+
+
+## BATLAS average expression
+
+```{r}
+load(here("03limma/rpkm_rep_for_plotting.RData"))
+```
+
+
+```{r}
+batlas_genes  = filter(long, Geneid %in% markrs$human[markrs$marker.type == "brown"])
+head(long)
+length(unique(batlas_genes$gene_name))
+
+ggplot(batlas_genes, 
+         aes(x=donor, y=fpkm +0.5, fill=condition, group=biorep)) +
+    geom_boxplot()  + 
+    ggtitle("Average BATLAS gene expression") + scale_y_log10()
+```
+
+
+```{r}
+to_plot =  group_by(batlas_genes, biorep, donor, condition, donor.condition,rep) %>% summarise(average = mean(fpkm), median= median(fpkm))
+ggplot(to_plot, 
+         aes(x=donor, y=average, fill=condition)) +
+    geom_bar(stat = "summary", fun=mean, position="dodge")  + 
+    geom_point( position=position_dodge(0.9)) +
+    ggtitle("Average BATLAS gene expression")
+
+ggplot(to_plot, 
+         aes(x=donor, y=median, fill=condition, group=donor.condition)) +
+  geom_bar(stat = "summary", fun=mean, position="dodge")  +
+    geom_dotplot(binaxis="y", stackdir = "center", position=position_dodge(0.9), fill="black", binwidth=0.4) +
+    ggtitle("Median BATLAS gene expression") + theme_bw(base_size=18)
+
+ggsave(file= here(figs, "median_batlas_gene_expression.pdf"))
+```
+
+```{r}
+library(ggpubr)
+head(to_plot)
+
+table(to_plot$group)
+summary(aov(median~condition*donor, data=to_plot))
+compare_means(median~condition, group.by="donor", data=to_plot, method="t.test", p.adjust.method = "fdr")
+```
+
+
+```{r}
+ggdotplot(to_plot, x = "donor", y = "median", fill="condition",group.by = "condition", position=position_dodge())
+```
+

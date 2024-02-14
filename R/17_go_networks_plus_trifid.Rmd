@@ -1,0 +1,109 @@
+---
+title: "go_networks_plus_trifid"
+output: pdf_document
+date: "2023-12-15"
+---
+Figure 2 G, H
+
+```{r message=FALSE, warning=FALSE}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(enrichplot)
+library(clusterProfiler)
+library(here); i_am("R/17_go_networks_plus_trifid.Rmd")
+```
+
+
+```{r}
+figs =  here("R/plots")
+load(file.path(figs, "Themogenesis_object.RData"))
+head(specific)
+specific = arrange(specific, desc(Count))
+
+cnetplot(specific, showCategory=6, categorySize="geneNum")
+```
+depicts the linkages of genes and biological concepts (e.g. GO terms or KEGG pathways) as a network. 
+
+to plot the trifid score, we just need a sorted list of these with names of genes
+
+```{r}
+trifid = read.delim(here("31_leafcutter", "trifid_DIFFERENCE_with_Alt_introns.tsv"))
+diff = trifid$trifid_diff
+names(diff) = trifid$gene_beige
+diff = diff[order(diff, decreasing=T)]
+summary(diff)
+```
+```{r}
+shorten = function(ont) {
+  no_beg = gsub("^(GO..|HALLMARK|WP|REACTOME)_", "" ,ont)
+  abb = abbreviate(stringr::str_to_title(gsub("_"," ", no_beg)),minlength=40, dot=T, named = F)
+  return(abb)
+}
+
+specific = mutate(specific, Description = shorten(ID) )
+
+cnetplot(specific, showCategory=6, categorySize="geneNum", foldChange=diff)
+
+cnetplot(specific, showCategory=6, categorySize="geneNum", color.params = list(foldChange = diff),
+         color_category='gold3' ) + scale_colour_gradient2(high="red", low="cyan3", mid="black", na.value="grey", name="TRIFID_diff")
+ggsave(file.path(figs, "thermogenesis_network_w_trifid.pdf"), width=9, height=7)
+```
+
+```{r}
+heatplot(specific, foldChange = diff) + theme_classic(base_size=18) + 
+  theme(axis.text.x = element_text(angle=90, vjust = 0.5, hjust=1))  + 
+  scale_fill_gradient2(high="red", low="cyan3", mid="black", na.value="grey", name="TRIFID_diff")
+ggsave(file.path(figs, "thermogenesis_nheatplot_w_trifid.pdf"), width=15, height=4)
+```
+
+```{r}
+load(file.path(figs, "GO_object.RData"))
+head(sig_ob)
+sig_ob = mutate(sig_ob, Description = shorten(ID) )
+
+cnetplot(sig_ob, showCategory=3, categorySize="geneNum", color.params = list(foldChange = diff),
+         color_category='gold3' ) + scale_colour_gradient2(high="red", low="cyan3", mid="black", na.value="grey", name="TRIFID_diff")
+```
+
+```{r}
+heatplot(sig_ob, foldChange = diff, showCategory = 3) + theme_classic(base_size=18) + 
+  theme(axis.text.x = element_text(angle=45, hjust=1)) + guides(fill = guide_colourbar(reverse=F)) + 
+  scale_fill_gradient2(high="red", low="cyan3", mid="black", na.value="grey", name="TRIFID_diff")
+ggsave(file.path(figs, "go_heatplot_w_trifid.pdf"), width=15, height=3)
+```
+
+## Average TRIFID scores per GO term
+```{r}
+actin_genes = sig_ob@result$geneID[1]
+actin_genes = stringr::str_split_1(actin_genes, "/")
+
+mean = filter(trifid, gene_beige %in% actin_genes) %>% summarise(mean(trifid_diff))
+head(mean)
+as.numeric(mean)
+
+average_trifid = function(geneID){
+  score = c()
+  for (i in 1:length(geneID)){
+    genes = stringr::str_split_1(geneID[i], "/")
+    trifid_score = filter(trifid, gene_beige %in% genes) %>% summarise(mean(trifid_diff))
+    score = c(score, as.numeric(trifid_score))
+  }
+  return (score)
+}
+
+with_trifid = mutate(filter(sig_ob,qvalue < 0.05), trifid = average_trifid(geneID))
+head(with_trifid)
+barplot(with_trifid, x="trifid") + labs(x="Average TRIFID difference")+ theme_classic(base_size=18)
+#dotplot(with_trifid, x="trifid") + labs(x="Average TRIFID difference")
+ggsave(file.path(figs, "actin_trifid_average.pdf"))
+```
+
+
+```{r}
+thermo_trifid = mutate(specific, trifid = average_trifid(geneID))
+barplot(thermo_trifid, x="trifid") + labs(x="Average TRIFID difference") + theme_classic(base_size=18)
+ggsave(file.path(figs, "thermogenesis_trifid_average.pdf"), width=9)
+```
+
+

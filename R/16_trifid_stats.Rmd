@@ -1,0 +1,125 @@
+---
+title: "trifid_stats"
+output: pdf_document
+date: "2023-12-15"
+---
+
+```{r message=FALSE, warning=FALSE}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(ggpubr)
+library(here); i_am("R/16_trifid_stats.Rmd")
+```
+
+```{r}
+figs = here("R/plots")
+trifid =  read.delim(here("31_leafcutter", "trifid_all_introns.tsv"))
+
+trifid$category = trifid$sig
+trifid$category[trifid$category == "white" & trifid$p.adjust < 0.05] = "p-value"
+trifid$category[trifid$category == "beige" & trifid$p.adjust < 0.05] = "p-value"
+trifid$category[trifid$p.adjust > 0.05] = "neither"
+
+table(trifid$sig)       
+table(trifid$category)
+table(trifid$in_trifid)
+table(trifid$annotation)
+length(unique(trifid$intron_coords))
+nrow(trifid)
+```
+
+58 clusters (corresponding to 116 two top introns) were not found in trifid.  
+
+```{r}
+table(trifid[c("annotation", "sig")])
+table(trifid[c("category", "in_trifid")])
+trifid[grep("PEMT",trifid$gene),]
+```
+
+```{r}
+ggplot(trifid, aes(x=category, fill=in_trifid)) + geom_bar(position="dodge")
+```
+```{r}
+ggplot(trifid, aes(x=category, y=mean_norm_score, colour=category)) + geom_boxplot() + geom_jitter()
+```
+
+Let's simplify these categories...
+
+sigbeige, sig white, pvalue, neither
+
+```{r}
+ggplot(filter(trifid, in_trifid == "in_trifid"), aes(x=category, y=mean_norm_score, colour=category)) + geom_violin() + 
+  geom_boxplot(width=0.2) #+ geom_jitter()
+```
+n=257 beige and n=280 white introns are in trifid to be compared like this 
+```{r}
+ggviolin(filter(trifid, in_trifid == "in_trifid"), x="category", y="mean_norm_score", col="category", trim=T) +
+    stat_compare_means(comparisons = list( c("neither","p-value"),
+                                        c("sig_white","sig_beige"),
+                                          c("sig_beige","neither"),
+                                          c("sig_white","neither")) ) +
+        stat_compare_means(method = "kruskal.test", label.y=1.5) + 
+    geom_boxplot(fill=NA, width=0.2) 
+```
+
+I wonder if the number of introns found for the pvalue and neither category could be subsampled to produce similar numbers and verify the statistics?  
+The white and beige categories each have ~300 introns in trifid, so lets check.  
+
+```{r}
+filt = bind_rows(filter(trifid,category %in% c("sig_white","sig_beige") & in_trifid=="in_trifid"),
+                 sample_n(filter(trifid,category == "neither" & in_trifid=="in_trifid"), 280),
+                 sample_n(filter(trifid,category == "p-value" & in_trifid=="in_trifid"), 280))
+nrow(filt)
+```
+
+```{r}
+write.table(filt, here(figs, "Figure2E_data.tsv"), sep="\t", quote = F, row.names = F)
+```
+
+
+```{r}
+ggviolin(filt, x="category", y="mean_norm_score", col="category", trim=T) +
+    stat_compare_means(comparisons = list( c("neither","p-value"),
+                                        c("sig_white","sig_beige"),
+                                          c("sig_beige","neither"),
+                                          c("sig_white","neither")) ) +
+        stat_compare_means(method = "kruskal.test", label.y=1.5) + 
+    geom_boxplot(fill=NA, width=0.2)  + geom_jitter(aes(colour=category), alpha=0.5) + 
+  theme_classic(base_size=18) 
+ggsave(file=file.path(figs, "trifid_stats.pdf"), width=7, height=4.5)
+```
+
+Those p-values seem more reasonable :)
+
+# Proportion of trifid not founds
+
+we're going to have to beef up these figures... because I haven't kept all of the unfound introns :)
+
+```{r}
+ggplot(trifid, aes(x= category,fill =in_trifid == "in_trifid",)) + geom_bar(position="fill")
+```
+
+```{r}
+trifid$simple_trifid = trifid$in_trifid
+trifid$simple_trifid [trifid$simple_trifid == "cluster_not_in_trifid"] = "not_in_trifid"
+prop = group_by(trifid, category, simple_trifid) %>% count()
+prop
+
+## we can update the numbers 
+prop = data.frame(in_trifid = c(58240,20000,280,257),
+                  not_in_trifid = c(39673, 16326, 90, 66),
+                  category = c("neither","p-value","sig_white","sig_beige"))
+head(prop)
+prop = pivot_longer(prop, 1:2)
+prop$name = factor(prop$name, levels=c("not_in_trifid", "in_trifid"))
+ggplot(prop, aes(x=category, fill= name, y=value)) + geom_bar(stat="identity")
+ggplot(prop, aes(x=category, fill= name, y=value)) + geom_bar(stat="identity", position="fill") + labs(y="Proportion")
+```
+
+non sig = 58240/ 97913 in trifid/not =  59.4%
+in sig cluster = 20000/36326 = 55.1%
+sig white = 280/(280+66) = 81.0%
+sig_beige = 257/(257+90) = 74.1%
+
+

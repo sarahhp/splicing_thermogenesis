@@ -1,0 +1,171 @@
+---
+title: "annotate_ALL_cryptic_introns"
+output: pdf_document
+---
+Figure 2B
+three_database_info_all_junctions.tsv
+
+Requires simplified annotation of introns and exons as produced by leafcutter/leafviz/gtf2leafcutter.pl from gtf files for each annotation.  
+
+```{r message=FALSE, warning=FALSE}
+library(tidyr)
+library(ggplot2)
+library(dplyr)
+library(ggrepel)
+here::i_am("R/12_annotate_ALL_cryptic_introns.Rmd")
+library(here)
+knitr::opts_chunk$set(dev = "pdf",
+                      dpi = 300,
+                      echo = FALSE,
+                      fig.path="plots/annotate_nonsig_cryptic_plots/")
+```
+
+
+```{r}
+leaf_junctions = read.delim(here("31_leafcutter","with_donor_info_leafcutter.txt"))
+leaf_junctions = mutate(leaf_junctions, strand = gsub(".*_","", intron),
+                   start = as.integer(gsub(":.*","", intron_coords)),
+                   end = as.integer(gsub(".*:","", intron_coords)))
+dim(leaf_junctions)
+```
+
+```{r}
+calc_mode = function(v){
+    freq = table(v)
+    as.numeric(names(freq)[which.max(freq)])
+}
+```
+
+## Add annotation information from ensembl
+```{r}
+INDEX = "/projects/imb-pkbphil/sp/annotations/ensembl98/leafcutter_index/"
+introns = read.delim(here("annotations/gencode", "gencode.v32_all_introns.bed.gz"), header = F,
+                          col.names=c("chr","start","end","gene_name","gene_id","strand",
+                                     "transcript_id","intron_number","biotype","annotation"))
+
+dim(introns)
+ens_trans = merge(leaf_junctions, introns, by=c("chr","start","end","strand"))
+
+ens_dist = group_by(ens_trans,  chr, start, end, strand,cluster_id,deltapsi, p.adjust, ) %>% 
+    summarise(transcript_ids = paste(unique(transcript_id), collapse=","),  
+            min_intron_number = min(intron_number),
+                mode_intron_number = calc_mode(intron_number),
+                gene = paste(unique(gene_name), collapse=","),
+            biotype=paste(unique(biotype), collapse=","))
+
+
+ens_dist = arrange(ens_dist, p.adjust) #89k of 132k are from ensembl junctions
+head(ens_dist); nrow(ens_dist)
+```
+
+```{r}
+cols_to_compare = c("chr","start","end","strand", "cluster_id", "deltapsi", "p.adjust")
+cryptic= setdiff(leaf_junctions[cols_to_compare], ens_dist[cols_to_compare], )
+nrow(cryptic)
+```
+
+
+## Load refseq information
+
+```{r}
+intron_index = read.delim(here("annotations/refseq", "refseq_2023_all_introns.bed.gz"), header = F,
+                          col.names=c("chr","start","end","gene_name","gene_id","strand",
+                                     "transcript_id","intron_number","biotype","annotation"))
+head(intron_index)
+table(intron_index$chr)
+```
+
+
+```{r}
+refseq = merge(cryptic, intron_index, by=c("chr","start","end","strand"))
+refseq_dist = group_by(refseq, chr, start, end, strand, deltapsi, p.adjust, cluster_id) %>% 
+    summarise(transcript_ids = paste(unique(transcript_id), collapse=","),  
+            min_intron_number = min(intron_number),
+                mode_intron_number = calc_mode(intron_number),
+                gene = paste(unique(gene_name), collapse=","))
+nrow(refseq_dist) ##11632  are found in refseq
+head(refseq_dist)
+table(refseq_dist$min_intron_number)#22 of these are most probably a first intron
+table(refseq_dist$mode_intron_number)
+
+refseq[refseq$gene_name == "PEMT",]
+```
+```{r}
+true_cryptic = setdiff(cryptic, refseq_dist[cols_to_compare])
+nrow(true_cryptic)
+head(true_cryptic)
+```
+
+## Check FANTOM CAT database
+
+```{r}
+intron_index = read.delim(here("annotations/fantom", "fantom_cat.lv3_robust_all_introns.bed.gz"), header = F,
+                          col.names=c("chr","start","end","gene_name","gene_id","strand",
+                                     "transcript_id","intron_number","biotype","annotation"))
+head(intron_index)
+table(intron_index$chr)
+```
+```{r}
+fantom_cat = merge(true_cryptic, intron_index, by=c("chr","start","end","strand"))
+fantom_dist = group_by(fantom_cat, chr, start,end, strand, deltapsi, p.adjust,cluster_id) %>%
+    summarise(transcript_ids = paste(unique(transcript_id), collapse=","), 
+                min_intron_number = min(intron_number),
+                mode_intron_number = calc_mode(intron_number),
+                gene = paste(unique(gene_name), collapse=","))
+nrow(fantom_dist) ##41 out of 73 remaining unnannoted introns are founs in fantom cat
+head(fantom_dist)
+
+table(fantom_dist$min_intron_number) #34 of these are most probably the first intron
+table(fantom_dist$mode_intron_number)
+```
+
+So perhaps we can put this info into our bar graph
+
+```{r}
+true_cryptic = setdiff(true_cryptic,  fantom_cat[cols_to_compare])
+nrow(true_cryptic)
+table(true_cryptic$verdict)
+```
+21831 introns cannot be annotated to a osition in a transcript, so are exlcuded from TSS analysis. 
+
+
+```{r}
+colnames(true_cryptic)
+
+true_cryptic$transcript_ids = "Unknown"
+true_cryptic$biotype = "Unknown"
+true_cryptic = select(true_cryptic,chr, start, end, strand, deltapsi,p.adjust,cluster_id,transcript_ids, biotype)
+
+all_annot = bind_rows(gencode=ens_dist, refseq=refseq_dist, fantom_cat=fantom_dist, cryptic= true_cryptic,.id = "annotation")
+head(all_annot)
+nrow(all_annot) #perfect all aligned
+```
+
+## Plot Annotation status
+
+```{r threedatabase}
+all_annot$annotation = factor(all_annot$annotation, levels=c("gencode","refseq","fantom_cat","cryptic"))
+all_annot$is_first_intron = all_annot$min_intron_number == 1
+ggplot(all_annot, aes(x=annotation, fill=annotation)) + geom_bar()  +
+    theme_classic(base_size=18) + theme(axis.text.x = element_blank(), axis.ticks.x = element_blank(), 
+                                        panel.border = element_blank(), axis.title.x = element_blank()) + 
+  geom_text(aes(label = after_stat(count), group = annotation), 
+    stat="count", vjust = -1) 
+
+
+ggplot(all_annot, aes(x=annotation, fill=is_first_intron)) + geom_bar() + 
+  geom_text_repel(aes(label = after_stat(count), group = paste(annotation , is_first_intron)), 
+    stat="count", vjust = -1,direction="y" ,seed=4)
+
+ggplot(all_annot, aes(x=annotation, fill=is_first_intron)) + geom_bar() + 
+  geom_text_repel(aes(label = after_stat(count), group = paste(annotation , is_first_intron)), 
+    stat="count", direction="y" , seed=4, nudge_y =1) 
+```
+
+```{r}
+head(all_annot)
+write.table(all_annot, file=here("31_leafcutter", "three_database_info_all_junctions.tsv"),
+            sep="\t", quote=F, row.names = F)
+```
+
+  

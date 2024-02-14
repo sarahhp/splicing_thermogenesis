@@ -1,0 +1,147 @@
+---
+title: "alt_introns_to_transcripts"
+output: pdf_document
+---
+
+Alt intron = the next highest intron from a cluster with only 1 significant intron.  Aka this intron has deltapsi < 0.1, but may represent the reciprocal to a significant intron that is significant.  This script overwrites "annotation/alt_introns_195.tsv" (which was made with annotate_cryptic_introns.Rmd), adding the annotation and transcript id columns.  Useful for TRIFID comparisons.  
+
+output files: 
+1. 31_leafcutter/alt_introns_195.tsv
+2. 31_leafcutter/three_database_info_sig_junction.tsv
+
+```{r}
+library(biomaRt)
+library(tidyr)
+library(dplyr)
+library(ggplot2)
+library(ggrepel)
+library(here); i_am("R/14_alt_introns_for_TRIFID.Rmd")
+```
+
+```{r}
+all_annot = read.delim(here("31_leafcutter", "three_database_info_all_junctions.tsv"))
+sig_junctions = filter(all_annot, p.adjust < 0.05 & abs(deltapsi) > 0.1)
+head(all_annot)
+nrow(all_annot)
+```
+
+
+#### Explore pairs of Diffspliced introns
+
+```{r}
+head(sig_junctions)
+head(table(sig_junctions$gene))
+sig_junctions= mutate(sig_junctions, condition = if_else(deltapsi > 0, "beige", "white"))
+has_gene_name =  sig_junctions[grep("^\\.$", sig_junctions$gene, invert = T),]
+nrow(has_gene_name) #0 introns have no annotated gene :)
+```
+
+```{r}
+table(table(has_gene_name$gene)) #this is the basic info I'm after
+#but now use dplyr to split it on more things
+```
+#### Introns per gene
+```{r}
+head(group_by(has_gene_name, gene, condition) %>% count())
+
+introns_per_gene = group_by(has_gene_name, gene, condition) %>% count()
+sum(introns_per_gene$n)
+genes_per_num_introns =  group_by(introns_per_gene, condition, n) %>% count(name="num_genes_with")
+genes_per_num_introns
+sum(genes_per_num_introns$num_genes_with)#647 genes*condition combos
+```
+
+okay closer but I want genes that have both a white and a beige....
+
+```{r}
+conditions_per_gene = group_by(has_gene_name, gene) %>% arrange(condition) %>% 
+    summarise(conditions = paste(unique(condition), collapse="&"), num_introns = n())
+head(conditions_per_gene)
+genes_per_condition =  group_by(conditions_per_gene, conditions, num_introns) %>% count(name="num_genes_with")
+genes_per_condition
+```
+
+#### Conditions per cluster
+```{r}
+conditions_per_cluster = group_by(sig_junctions, cluster_id) %>% arrange(condition) %>% 
+    summarise(conditions = paste(unique(condition), collapse="&"), num_introns = n())
+head(conditions_per_cluster)
+clusters_per_condition =  group_by(conditions_per_cluster, conditions, num_introns) %>% count(name="num_clusters_with")
+clusters_per_condition
+```
+
+This is much easier to represent and understand I think.  CITED1 ends up in the white and beige 3 intron category
+```{r}
+conditions_per_cluster[conditions_per_cluster$num_introns == 2,]
+```
+
+
+```{r switchers}
+ggplot(clusters_per_condition, aes(x=num_introns, fill=conditions, y=num_clusters_with)) + 
+    geom_bar(stat="identity", position= "dodge") + theme_classic(base_size=18) + 
+    labs(x="Number of introns passing filters") + scale_fill_discrete(name="Direction of dPSI")
+```
+
+As you have a significant cluster you'll have a second intron moving in the opposite direction, we're just eliminating them with the filter.  So for trifid  we select the next highest intron to compare?  
+
+### Each cluster contains a pair of diffspliced junctions 
+
+```{r}
+sig_junctions=merge(sig_junctions, conditions_per_cluster, by="cluster_id")
+nrow(sig_junctions)
+head(sig_junctions)
+```
+
+## Select introns from significant clusters
+```{r}
+filt_clusters = all_annot[all_annot$cluster_id %in% sig_junctions$cluster_id,]
+nrow(filt_clusters)
+```
+
+#### Diagnostic plots
+```{r}
+filt_clusters = merge(filt_clusters, select(sig_junctions, cluster_id, num_introns,conditions), by="cluster_id")
+filt_clusters$cluster_id = factor(filt_clusters$cluster_id, levels=unique(filt_clusters$cluster_id[
+                                      order(filt_clusters$num_introns, filt_clusters$deltapsi)]))
+filt_clusters = mutate(filt_clusters, sig = p.adjust < 0.05 & abs(deltapsi) > 0.1)
+```
+
+This is an interesting diagnostic plot.  
+1) clusters with only 1 above-filter intron have lower deltapsi
+2) ^ these also tend to have another intron just below the filter level.
+3) its fun to see the three introns how they're distributed.  The ones with the biggest difference have two beige introns.  
+
+```{r}
+ggplot(filter(filt_clusters,num_introns==1), aes(x=cluster_id,y=deltapsi, colour=sig)) + geom_point(size=0.5) + theme_classic() + theme(axis.text.x= element_blank())
+```
+
+```{r}
+possible_includers = filter(filt_clusters, num_introns==1 & !sig & abs(deltapsi)>0.05)
+nrow(possible_includers) #236 introns
+length(unique(possible_includers$cluster_id))#169 of the single introns have another intron > 0.05 we could use for comparison
+```
+
+169 possible cluster comparisons... that could work: means we have only ~25 without a comparable intron.  Its more complexity atm; but it may make sense overall to avoid comparing across categories?? And to use the leafcutter in a way that honours its concept, rather than working against it.  
+
+I don't find a problem with using the next highest, regardless of how low that dpsi is.  We know its a small number with extremely low deltapsis. That can serve as a representative of the not changing transcripts.  
+
+## Select alt introns
+so for each of the clusters with just 1 intron; pick the intron with the maximum abs(deltpsi) to include
+
+```{r}
+alt_introns = group_by(filt_clusters, cluster_id) %>% filter(abs(deltapsi) < 0.1 & num_introns ==1) %>% slice(which.max(abs(deltapsi)))
+
+alt_introns = select(alt_introns,colnames(all_annot) )
+nrow(alt_introns)
+head(alt_introns)
+summary(alt_introns$deltapsi)
+```
+
+```{r}
+write.table(alt_introns, here("31_leafcutter", "alt_introns_195.tsv"),
+            sep="\t", quote = F, row.names = F)
+
+write.table(sig_junctions, file=here("31_leafcutter", "three_database_info_sig_junctions.tsv"),
+            sep="\t", quote=F, row.names = F) 
+nrow(sig_junctions)
+```

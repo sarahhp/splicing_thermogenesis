@@ -1,0 +1,38 @@
+---
+title: "Unibind_to_pdf"
+output: pdf_document
+date: "2024-01-29"
+---
+
+```{r}
+library(ggplot2)
+library(here); i_am("R/Figure3/Fig3D_Unibind_to_pdf.Rmd")
+```
+
+
+```{r}
+LEAF = here("31_leafcutter/promoter_binding/")
+
+results = read.delim(file.path(LEAF, "UniBind_twoSets_jxq3t3oo_20240129/allEnrichments.tsv"))
+head(results)
+```
+
+```{r}
+top10 = results[results$collection %in% head(unique(results$collection), n=10),]
+str(top10)
+
+top10$collection = factor(top10$collection, levels=head(unique(results$collection), n=10))
+top10$is_adipose = grepl("adipo", top10$cellType)
+```
+
+```{r}
+ggplot(top10) + geom_jitter(aes(x=collection, y=pValueLog, color=collection), show.legend = F, size=2) + 
+  theme_classic(base_size=18) + theme(axis.text.x = element_text(angle=45, hjust=1), axis.title.x = element_blank()) +
+  scale_color_brewer(palette = "Paired") + ylab("-log10 (p value)")
+ggsave(file.path(LEAF, "Beige_unibind_results.pdf"), width=4, height=4)
+
+ggplot(top10) + geom_jitter(aes(x=collection, y=pValueLog, color=is_adipose)) + 
+  theme_classic(base_size=18) + theme(axis.text.x = element_text(angle=45, hjust=1)) 
+```
+
+

@@ -1,0 +1,57 @@
+ID-geneID
+Hallmark Adipogenesis-PEMT
+Hallmark Adipogenesis-PPARG
+Hallmark Adipogenesis-ENPP2
+Hallmark Adipogenesis-TOB1
+Hallmark Adipogenesis-BCL6
+Hallmark Adipogenesis-ACADL
+Hallmark Adipogenesis-CRAT
+Hallmark Adipogenesis-SLC19A1
+Hallmark Adipogenesis-SSPN
+Hallmark Fatty Acid Metabolism-FMO1
+Hallmark Fatty Acid Metabolism-ACADL
+Hallmark Fatty Acid Metabolism-CRAT
+Hallmark Fatty Acid Metabolism-SLC22A5
+Hallmark Fatty Acid Metabolism-AUH
+Hallmark Fatty Acid Metabolism-ACOT2
+Hallmark Fatty Acid Metabolism-ENO3
+Wp Thermogenesis-PPARG
+Wp Thermogenesis-PRKG1
+Wp Thermogenesis-CPT1B
+Wp Thermogenesis-RPS6KB1
+Gobp Positive Regulation Of Cold Induced Thermogenesis-PEMT
+Gobp Positive Regulation Of Cold Induced Thermogenesis-LPIN1
+Gobp Positive Regulation Of Cold Induced Thermogenesis-ACADL
+Wp Differentiation Of White And Brown Adipocyte-PPARG
+Gobp Adaptive Thermogenesis-PEMT
+Gobp Adaptive Thermogenesis-LPIN1
+Gobp Adaptive Thermogenesis-PGAM5
+Gobp Adaptive Thermogenesis-ACADL
+Gocc Mitochondrial Matrix-PC
+Gocc Mitochondrial Matrix-CA5B
+Gocc Mitochondrial Matrix-BLOC1S1
+Gocc Mitochondrial Matrix-PTPN1
+Gocc Mitochondrial Matrix-MRPL33
+Gocc Mitochondrial Matrix-ACADL
+Gocc Mitochondrial Matrix-FASTKD5
+Gocc Mitochondrial Matrix-FASTKD3
+Gocc Mitochondrial Matrix-AUH
+Gocc Mitochondrial Matrix-FPGS
+Gocc Mitochondrial Matrix-SUPV3L1
+Gocc Mitochondrial Matrix-ACOT2
+Gocc Mitochondrial Matrix-RPUSD3
+Gocc Mitochondrial Matrix-ADHFE1
+Gobp Monocarboxylic Acid Metabolic Process-PC
+Gobp Monocarboxylic Acid Metabolic Process-LPIN1
+Gobp Monocarboxylic Acid Metabolic Process-FMO1
+Gobp Monocarboxylic Acid Metabolic Process-QKI
+Gobp Monocarboxylic Acid Metabolic Process-ACADL
+Gobp Monocarboxylic Acid Metabolic Process-CPT1B
+Gobp Monocarboxylic Acid Metabolic Process-ILVBL
+Gobp Monocarboxylic Acid Metabolic Process-CRAT
+Gobp Monocarboxylic Acid Metabolic Process-AUH
+Gobp Monocarboxylic Acid Metabolic Process-MLXIPL
+Gobp Monocarboxylic Acid Metabolic Process-CES2
+Gobp Monocarboxylic Acid Metabolic Process-ACOT2
+Gobp Monocarboxylic Acid Metabolic Process-ENO3
+Gobp Negative Regulation Of Cold Induced Thermogenesis-PGAM5

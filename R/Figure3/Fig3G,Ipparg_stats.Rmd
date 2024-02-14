@@ -1,0 +1,131 @@
+---
+title: "ChIPseq stats PPARg + MED1"
+output: pdf_document
+---
+
+```{r}
+library(tidyr)
+library(dplyr)
+library(ggplot2)
+library(ggpubr)
+library(ggrepel)
+library(here); i_am("R/Figure3/Fig3G,Ipparg_stats.Rmd")
+```
+
+
+```{r}
+WINDOWS= "C:/Users/sarahhp/OneDrive - Universitetet i Oslo/Projects/rnaseq/beige_rnaseq_jul22/31_leafcutter/histone_profile/new_TSS"
+
+mark = "PPARG"
+window = "250:250"
+tss_sets = c("beige","white","not_sig")
+
+enrich_tables = list()
+for (set in tss_sets){
+  file = here("31_leafcutter/histone_profile", mark, paste0("window", window), paste0(set,".",window, "_white_beige.tab"))
+  annot = read.delim(file, quote="'")
+  colnames(annot)[grep("chr", colnames(annot))] = "chr"
+  annot$tss_set = set
+  enrich_tables[[set]] = annot
+}
+str(enrich_tables)
+
+annot <- do.call(rbind, enrich_tables)
+table(annot$tss_set)
+head(annot); nrow(annot)
+```
+
+```{r}
+long = pivot_longer(annot, grep("Adi.",colnames(annot)), names_to = "context", values_to = "mean_enrichment")
+long$context = factor(long$context, levels=c("White_Adi.","Beige_Adi."))
+long$tss_set = factor(long$tss_set, levels=c("white","beige","not_sig"))
+long$group = paste0(long$context, long$tss_set)
+long$group = factor(long$group, levels=paste0(rep(levels(long$context),each=3), levels(long$tss_set)))
+```
+
+
+```{r}
+ggplot(long, 
+       aes(x=tss_set, y=mean_enrichment, color=context)) +geom_violin()+ 
+    geom_boxplot(fill=NA, position=position_dodge(0.9)) +scale_color_manual(values= c("dodgerblue","orange"))+ 
+  ggtitle(mark) + scale_y_log10()
+```
+
+```{r}
+ggplot(long, 
+       aes(x=context, y=mean_enrichment, fill=tss_set, group=group)) + geom_violin() + 
+    geom_boxplot(fill=NA, position=position_dodge(0.9), outlier.shape = NA) +  scale_fill_manual(values= c("dodgerblue","orange","grey"))  + 
+  ggtitle(mark) + scale_y_log10() + theme_classic(base_size=22)
+ggsave(here("31_leafcutter/histone_profile", mark, paste0(mark, "_violin_plot.pdf")))
+```
+
+
+```{r}
+long$logenrichment = log10(long$mean_enrichment)
+summary(aov(logenrichment ~tss_set+context, data=long))
+
+compare_means(logenrichment ~ tss_set, data=long, method="wilcox.test", group.by="context")
+```
+
+```{r}
+summary(aov(logenrichment ~tss_set*context, data=long))
+```
+
+
+## MED1
+
+```{r}
+mark = "MED1"
+window = "500:500"
+tss_sets = c("beige","white","not_sig")
+
+enrich_tables = list()
+for (set in tss_sets){
+  file = here("31_leafcutter/histone_profile", mark, paste0("window", window), paste0(set,".",window, "_white_beige.tab"))
+  annot = read.delim(file, quote="'")
+  colnames(annot)[grep("chr", colnames(annot))] = "chr"
+  annot$tss_set = set
+  enrich_tables[[set]] = annot
+}
+str(enrich_tables)
+
+annot <- do.call(rbind, enrich_tables)
+table(annot$tss_set)
+head(annot); nrow(annot)
+```
+
+```{r}
+long = pivot_longer(annot, grep("Adi.",colnames(annot)), names_to = "context", values_to = "mean_enrichment")
+long$context = factor(long$context, levels=c("White_Adi.","Beige_Adi."))
+long$tss_set = factor(long$tss_set, levels=c("white","beige","not_sig"))
+long$group = paste0(long$context, long$tss_set)
+long$group = factor(long$group, levels=paste0(rep(levels(long$context),each=3), levels(long$tss_set)))
+```
+
+
+```{r}
+ggplot(long, 
+       aes(x=tss_set, y=mean_enrichment, color=context)) +geom_violin()+ 
+    geom_boxplot(fill=NA, position=position_dodge(0.9)) +scale_color_manual(values= c("dodgerblue","orange"))+ 
+  ggtitle(mark) + scale_y_log10()
+```
+
+```{r}
+ggplot(long, 
+       aes(x=context, y=mean_enrichment, fill=tss_set, group=group)) + geom_violin() + 
+    geom_boxplot(fill=NA, position=position_dodge(0.9), outlier.shape = NA) +  scale_fill_manual(values= c("dodgerblue","orange","grey"))  + 
+  ggtitle(mark) + scale_y_log10() + theme_classic(base_size=18)
+ggsave(here("31_leafcutter/histone_profile", mark, paste0(mark, "_violin_plot.pdf")))
+```
+
+
+```{r}
+long$logenrichment = log10(long$mean_enrichment)
+summary(aov(logenrichment ~tss_set*context, data=long))
+
+compare_means(logenrichment ~ tss_set, data=long, method="wilcox.test", group.by="context")
+compare_means(logenrichment ~ context, data=long, method="wilcox.test", group.by="tss_set")
+```
+
+Huh interesting Not significant TSSes have more med1 signal in white adipocytes than beige.  Its highly significant even though the difference in means is so small; i guess thats the number of points helps it look more significant.  
+
