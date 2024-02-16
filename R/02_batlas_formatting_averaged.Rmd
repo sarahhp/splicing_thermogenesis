@@ -1,12 +1,12 @@
 ---
-title: "batlas_formatting_averaged_take_2"
+title: "batlas_formatting_averaged"
 author: "Sarah Hp"
 date: '2022-09-02'
 output: html_document
 ---
 
 ```{r}
-here::i_am("R/02_batlas_formatting_averaged_take2.Rmd")
+here::i_am("R/02_batlas_formatting_averaged.Rmd")
 library(dplyr)
 library(ggplot2)
 library(here)
@@ -128,19 +128,22 @@ nrow(any_sig)
 sm = sm[rownames(sm) %in% any_sig$gene_name,]
 nrow(sm)
 
-donann = HeatmapAnnotation(subject = gsub(".*_","",colnames(sm)))
 treatann = HeatmapAnnotation(treat=treat,
-                                  subject = gsub(".*_","",colnames(sm)),
+                                #  subject = gsub("\\..*","",colnames(sm)),
                              col=list(treat =c(white="#74B2CD",beige="#C1A486")))
 ```
 
 
 ```{r}
 donors = c("S1","S3","S4","S5","S6","S2")
+pdf(here("R/plots", "BATLAS_heatmap.pdf"), width=6, height=7)
 Heatmap(sm,name="Relative \nGene \nExpression \n(FPKM)", 
              bottom_annotation = treatann, column_title_side ="top", 
           column_order =  paste( c(rev(donors), donors),  sep=".", rep(c("white","beige"),each=6)),
+        column_labels = gsub("\\..*","",colnames(sm)), column_names_side = "top", 
+        column_names_rot=0, column_names_centered = T, 
 )
+dev.off
 ```
 
 
@@ -155,16 +158,23 @@ load(here("03limma/rpkm_rep_for_plotting.RData"))
 batlas_genes  = filter(long, Geneid %in% markrs$human[markrs$marker.type == "brown"])
 head(long)
 length(unique(batlas_genes$gene_name))
+batlas_genes$donor = factor(batlas_genes$donor, levels=levels(batlas_genes$donor)[order(levels(batlas_genes$donor))])
 
 ggplot(batlas_genes, 
          aes(x=donor, y=fpkm +0.5, fill=condition, group=biorep)) +
     geom_boxplot()  + 
-    ggtitle("Average BATLAS gene expression") + scale_y_log10()
+    ggtitle("BATLAS gene expression") + scale_y_log10()
 ```
 
 
 ```{r}
-to_plot =  group_by(batlas_genes, biorep, donor, condition, donor.condition,rep) %>% summarise(average = mean(fpkm), median= median(fpkm))
+to_plot =  group_by(batlas_genes, biorep, donor, condition, donor.condition,rep) %>% summarise(average = mean(fpkm), median= median(fpkm), ave_log = mean(log2(fpkm)))
+ggplot(to_plot, 
+         aes(x=donor, y=ave_log, fill=condition)) +
+    geom_bar(stat = "summary", fun=mean, position="dodge")  + 
+    geom_point( position=position_dodge(0.9)) +
+    ggtitle("Average log BATLAS gene expression")
+
 ggplot(to_plot, 
          aes(x=donor, y=average, fill=condition)) +
     geom_bar(stat = "summary", fun=mean, position="dodge")  + 
@@ -174,8 +184,10 @@ ggplot(to_plot,
 ggplot(to_plot, 
          aes(x=donor, y=median, fill=condition, group=donor.condition)) +
   geom_bar(stat = "summary", fun=mean, position="dodge")  +
-    geom_dotplot(binaxis="y", stackdir = "center", position=position_dodge(0.9), fill="black", binwidth=0.4) +
-    ggtitle("Median BATLAS gene expression") + theme_bw(base_size=18)
+    geom_dotplot(binaxis="y", stackdir = "center", position=position_dodge(0.9), fill="black", binwidth=0.35) +
+    labs(title="Median BATLAS gene expression", y="Median Expression (FPKM)") + theme_classic(base_size=18) +
+  scale_fill_manual(values =c("#B7D6D6", "#EE8A21")) +
+                      scale_x_discrete(labels = gsub("subject","S",levels(to_plot$donor)))
 
 ggsave(file= here(figs, "median_batlas_gene_expression.pdf"))
 ```

@@ -133,8 +133,18 @@ Heatmap(norm[rownames(norm) %in% spliceaid,])
 
 
 ```{r}
+treat = gsub(".*\\.","",colnames(norm))
+treat
+treatann = HeatmapAnnotation(condition=treat,
+                             col=list(treat =c(white="#74B2CD",beige="#C1A486")))
+
+donors = gsub("\\..*","",colnames(norm))
 hm = Heatmap(norm[rownames(norm) %in% c(reg_rnasplice, "UCP1") &
-               rownames(norm) %in% any_sig,], height=5)
+               rownames(norm) %in% any_sig,], name="Relative \nGene \nExpression \n(FPKM)", 
+             bottom_annotation = treatann, column_title_side ="top", ,
+        column_labels = gsub("subject","S",donors), column_names_side = "top", 
+        column_names_rot=0, column_names_centered = T,
+        height=5)
 hm
 
 pdf(here("R/plots", "reg_rnasplice_factors_any_sig.pdf"), width=5, height=7)

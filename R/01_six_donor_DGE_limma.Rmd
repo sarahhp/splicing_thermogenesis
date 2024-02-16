@@ -506,7 +506,7 @@ write.table(format_rpkm, sep='\t', row.names = FALSE,quote = F,
 ```{r}
 library(tidyr)
 long = pivot_longer(format_rpkm, 7:ncol(format_rpkm), names_to = "biorep", values_to ="fpkm")
-long$donor = factor(gsub("\\..*", "", long$biorep), levels=unique(filt$samples$donor))
+long$donor = factor(gsub("\\..*", "", long$biorep))
 long$condition = factor(gsub(".*\\.","", gsub("_rep.","", long$biorep)), levels=c("white","beige"))
 long$rep = gsub(".*_","", long$biorep)
 long$donor.condition = factor(paste(long$donor, long$condition, sep="."), 
