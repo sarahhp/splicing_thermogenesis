@@ -1,10 +1,10 @@
 ---
 title: "splicing_factors_heatmap_day15"
-output: html_document
+output: pdf_document
 date: "2023-10-20"
 ---
 
-```{r}
+```{r message=FALSE, warning=FALSE}
 library(tidyr)
 library(dplyr)
 library(ComplexHeatmap)
@@ -102,23 +102,23 @@ summary("ENSG00000139910" == rpkm$Geneid) #NOVA1 is expressed.
 ```{r}
 sig = read.delim(here("03limma","any_and_all_donor_DGE.tsv"))
 colnames(sig)
-all_sig = sig$gene_name[rowSums(sig[startsWith(colnames(sig), "adj.P.Val.d")] < 0.05) == 6]
+all_sig = sig$gene_name[rowSums(sig[startsWith(colnames(sig), "adj.P.Val.s")] < 0.05) == 6]
 length(all_sig)
   
-any_sig = sig$gene_name[sig$adj.P.Val < 0.01] 
+any_sig = sig$gene_name[sig$all.donors.adj.P.Val < 0.01] 
 length(any_sig)
 ```
 
 
 ```{r}
 summary(reg_rnasplice %in% all_sig) #NONE are sig in all donors
-summary(reg_rnasplice %in% any_sig) #only 43 are significant in any donor
-43/157 #only 30% of expressed factors are DE in any donor
+summary(reg_rnasplice %in% any_sig) #only 52 are significant in any donor
+52/157 #only 33% of expressed factors are DE in any donor
 ```
 
 ```{r}
 summary(spliceaid %in% all_sig) #NONE are sig in all donors
-summary(spliceaid %in% any_sig) #only 14 are significant in any donor
+summary(spliceaid %in% any_sig) #only 17 are significant in any donor
 ```
 
 
