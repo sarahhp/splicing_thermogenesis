@@ -457,7 +457,7 @@ nrow(sm)</code></pre>
                                 #  subject = gsub(&quot;\\..*&quot;,&quot;&quot;,colnames(sm)),
                              col=list(treat =c(white=&quot;#74B2CD&quot;,beige=&quot;#C1A486&quot;)))</code></pre>
 <pre class="r"><code>donors = c(&quot;S1&quot;,&quot;S3&quot;,&quot;S4&quot;,&quot;S5&quot;,&quot;S6&quot;,&quot;S2&quot;)
-pdf(here(&quot;R/plots&quot;, &quot;BATLAS_heatmap.pdf&quot;), width=6, height=7)
+pdf(here(&quot;R/plots&quot;, &quot;BATLAS_heatmap.pdf&quot;), width=7, height=7)
 Heatmap(sm,name=&quot;Relative \nGene \nExpression \n(FPKM)&quot;, 
              bottom_annotation = treatann, column_title_side =&quot;top&quot;, 
           column_order =  paste( c(rev(donors), donors),  sep=&quot;.&quot;, rep(c(&quot;white&quot;,&quot;beige&quot;),each=6)),
@@ -472,7 +472,7 @@ dev.off</code></pre>
 ##     .External(C_devoff, as.integer(which))
 ##     dev.cur()
 ## }
-## &lt;bytecode: 0x1538778&gt;
+## &lt;bytecode: 0x1ffa6c8&gt;
 ## &lt;environment: namespace:grDevices&gt;</code></pre>
 </div>
 <div id="batlas-average-expression" class="section level2">

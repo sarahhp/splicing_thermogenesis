@@ -181,15 +181,11 @@ head(combo)
 write.table(combo, paste0(opt$output_prefix,"_leafcutter.txt"), quote=F, col.names = T, row.names = F, sep="\t")
 ```
 
-```{r eval=F}
-make_differential_splicing_plot(t(counts[combo$p.adjust < 0.01,]), numeric_x, exons_table)
-```
-^ not sure that this works?  
 
 ```{r}
 summary(combo$p.adjust < 0.05)#36 thousand exon excision events?!
 summary(combo$p.adjust < 0.01)
-summary(combo$p.adjust < 0.05 & abs(combo$deltapsi)> 0.1)#with a delta psi threshold though, we have only 693 which is manageable (phew!)
+summary(combo$p.adjust < 0.05 & abs(combo$deltapsi)> 0.1)#with a delta psi threshold though, we have only 693 which is manageable 
 summary(combo$p.adjust < 0.01 & abs(combo$deltapsi)> 0.1)
 ```
 

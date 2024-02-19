@@ -136,7 +136,7 @@ treatann = HeatmapAnnotation(treat=treat,
 
 ```{r}
 donors = c("S1","S3","S4","S5","S6","S2")
-pdf(here("R/plots", "BATLAS_heatmap.pdf"), width=6, height=7)
+pdf(here("R/plots", "BATLAS_heatmap.pdf"), width=7, height=7)
 Heatmap(sm,name="Relative \nGene \nExpression \n(FPKM)", 
              bottom_annotation = treatann, column_title_side ="top", 
           column_order =  paste( c(rev(donors), donors),  sep=".", rep(c("white","beige"),each=6)),

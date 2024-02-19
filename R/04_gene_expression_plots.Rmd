@@ -1,0 +1,42 @@
+---
+title: "04_gene_expression_plots"
+output: pdf_document
+---
+
+PPARG and PEMT expression plots
+Figure 4D and Figure 5D
+
+```{r message=FALSE, warning=FALSE}
+library(ggplot2)
+library(ggpubr)
+library(here); i_am("R/04_gene_expression_plots.Rmd")
+```
+
+
+```{r}
+load(here("03limma/rpkm_rep_for_plotting.RData"))
+long$donor = gsub("subject","S", long$donor)
+```
+
+
+
+```{r}
+plot_six_donors = function(gene_to_plot){
+    c = ggplot(long[long$gene_name == gene_to_plot,], 
+         aes(x=donor, y=fpkm, fill=condition, group=donor.condition)) +
+    geom_bar(stat = "summary", fun=mean, position="dodge")  + 
+    geom_point(position=position_dodge(0.9)) +
+    ggtitle(gene_to_plot) + scale_fill_manual(values=c("#B7D6D6","#EE8A21")) +
+        theme_classic(base_size=18)
+    return(c)
+}
+```
+
+
+```{r}
+plot_six_donors("PPARG")
+ggsave(here("R/plots/PPARG_gene_expr.pdf"))
+plot_six_donors("PEMT")
+ggsave(here("R/plots/PEMT_gene_expr.pdf"))
+```
+

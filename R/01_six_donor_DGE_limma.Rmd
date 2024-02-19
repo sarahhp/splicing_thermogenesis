@@ -217,12 +217,12 @@ head(design)
 
 ```{r}
 explicit_fit = lmFit(norm, design=design)
-coi = makeContrasts(s4 = b.s4- w.s4,
-                    s3 = b.s3 - w.s3,
+coi = makeContrasts(s1 = b.s1 - w.s1,
                     s2 = b.s2 - w.s2,
-                    s1 = b.s1 - w.s1,
-                    s6 = b.s6 - w.s6,
+                    s3 = b.s3 - w.s3,
+                    s4 = b.s4 - w.s4,
                     s5 = b.s5 - w.s5,
+                    s6 = b.s6 - w.s6,
                       levels = design)
 cfit = contrasts.fit(explicit_fit, coi)
 efit = eBayes(cfit, robust=T)
@@ -295,17 +295,18 @@ upset(results_bin[,grep("beige", colnames(results_bin))],nsets=14,
 We can extract merely like this
 
 ```{r}
+donors = c('s1','s2','s3','s4','s5','s6')
 anytable = topTable(efit, number = Inf, adjust.method = "BH", 
-                    coef = c('s3','s4','s2','s1','s6','s5'))
-anytable$AvelogFC = rowMeans(anytable[c('s3','s4','s2','s1','s6','s5')])
-summary(anytable$adj.P.Val < 0.01) #much more conserative than previous tries
+                    coef =donors)
+anytable$AvelogFC = rowMeans(anytable[donors])
+summary(anytable$adj.P.Val < 0.01) 
 ```
 
 ### Donor tables
 
 ```{r}
 donortabs = list()
-donors = c('s3','s4','s2','s1','s6','s5')
+
 base_matrix = matrix(NA, dimnames = list(efit$genes$gene_name,donors), 
                                      nrow = nrow(efit$genes), ncol=length(donors))
 donorlists = list(adj.p.val = base_matrix, logFC = base_matrix,  
@@ -328,7 +329,7 @@ for (d in donors){
   formatted = formatted[,c(ann_cols,"P.Value","adj.P.Val","AveExpr")]
   alltab = merge(alltab, formatted, by=ann_cols,
                  suffixes = c("",paste(".", d, sep="")))
-  alltab = alltab[!duplicated(alltab$gene_name),] #remove duplicates because they tend to propogate
+  alltab = alltab[!duplicated(alltab$gene_name),] #remove duplicates because they tend to propogate on merges
 }
 head(alltab); nrow(alltab)
 
