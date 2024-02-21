@@ -51,7 +51,8 @@ ens_dist = group_by(ens_trans,  chr, start, end, strand,cluster_id,deltapsi, p.a
             min_intron_number = min(intron_number),
                 mode_intron_number = calc_mode(intron_number),
                 gene = paste(unique(gene_name), collapse=","),
-            biotype=paste(unique(biotype), collapse=","))
+            biotype=paste(unique(biotype), collapse=","),
+            genes_in_cluster =paste(unique(genes), collapse=",") )
 
 
 ens_dist = arrange(ens_dist, p.adjust) #89k of 132k are from ensembl junctions
@@ -59,7 +60,8 @@ head(ens_dist); nrow(ens_dist)
 ```
 
 ```{r}
-cols_to_compare = c("chr","start","end","strand", "cluster_id", "deltapsi", "p.adjust")
+cols_to_compare = c("chr","start","end","strand", "cluster_id", "deltapsi", "p.adjust","genes_in_cluster")
+leaf_junctions = rename(leaf_junctions, genes_in_cluster = genes)
 cryptic= setdiff(leaf_junctions[cols_to_compare], ens_dist[cols_to_compare], )
 nrow(cryptic)
 ```
@@ -82,7 +84,8 @@ refseq_dist = group_by(refseq, chr, start, end, strand, deltapsi, p.adjust, clus
     summarise(transcript_ids = paste(unique(transcript_id), collapse=","),  
             min_intron_number = min(intron_number),
                 mode_intron_number = calc_mode(intron_number),
-                gene = paste(unique(gene_name), collapse=","))
+                gene = paste(unique(gene_name), collapse=","),
+            genes_in_cluster =paste(unique(genes_in_cluster), collapse=","))
 nrow(refseq_dist) ##11632  are found in refseq
 head(refseq_dist)
 table(refseq_dist$min_intron_number)#22 of these are most probably a first intron
@@ -111,7 +114,8 @@ fantom_dist = group_by(fantom_cat, chr, start,end, strand, deltapsi, p.adjust,cl
     summarise(transcript_ids = paste(unique(transcript_id), collapse=","), 
                 min_intron_number = min(intron_number),
                 mode_intron_number = calc_mode(intron_number),
-                gene = paste(unique(gene_name), collapse=","))
+                gene = paste(unique(gene_name), collapse=","),
+              genes_in_cluster =paste(unique(genes_in_cluster), collapse=","))
 nrow(fantom_dist) ##41 out of 73 remaining unnannoted introns are founs in fantom cat
 head(fantom_dist)
 
@@ -161,6 +165,21 @@ ggplot(all_annot, aes(x=annotation, fill=is_first_intron)) + geom_bar() +
   geom_text_repel(aes(label = after_stat(count), group = paste(annotation , is_first_intron)), 
     stat="count", direction="y" , seed=4, nudge_y =1) 
 ```
+
+
+## Check for cross-gene clusters
+
+```{r}
+head(unique(all_annot$genes_in_cluster), n=20)
+summary(grepl( ",",all_annot$genes_in_cluster))
+summary(grepl( ",",all_annot$genes_in_cluster) & abs(all_annot$deltapsi) > 0.1 & all_annot$p.adjust < 0.05)
+# 100 of 693 junctions are in a cluster with another gene
+# Some of these are just lowly expressed ncRNAs
+# Others are known fusion / readthrough transcripts e.g. STON1-GTF2A1L
+```
+
+
+## Save
 
 ```{r}
 head(all_annot)
