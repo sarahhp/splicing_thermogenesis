@@ -14,8 +14,6 @@ library(here); i_am("R/Figure3/Fig3G,Ipparg_stats.Rmd")
 
 
 ```{r}
-WINDOWS= "C:/Users/sarahhp/OneDrive - Universitetet i Oslo/Projects/rnaseq/beige_rnaseq_jul22/31_leafcutter/histone_profile/new_TSS"
-
 mark = "PPARG"
 window = "250:250"
 tss_sets = c("beige","white","not_sig")

@@ -32,10 +32,11 @@ EnhancedVolcano(leaf, lab=leaf$genes, x="deltapsi", y="p",
                 )
 ggsave(filename = here("R/plots", "volcanoplot.pdf"), width=8, height =7)
 
+#random labelling
 EnhancedVolcano(leaf, lab=leaf$genes, x="deltapsi", y="p", 
                 xlim=c(-0.7, 0.7), legendPosition = "right",
                 pCutoffCol = "p.adjust", pCutoff = 0.01,
-                FCcutoff = 0.05, ylab = "-log10 P value per cluster",
+                FCcutoff = 0.1, ylab = "-log10 P value per cluster",
                 xlab="dPSI per junction",  legendLabels = c("Not Sig", "dPSI", "p-value", "p-value and dPSI"))
 ```
 ## Exon switching events
@@ -89,24 +90,6 @@ head(go)[3:9]
 
 No significant terms but still a decent number of actin filament process genes have Diff splicing. Perhaps we need to run these separately.
 
-Write table to get genes lists
-```{r}
-to_print = go[,c("ID","GeneRatio", "BgRatio"  ,
-                  "pvalue"    ,  "p.adjust" ,   "qvalue"    ,  "geneID"   ,   "Count" )]
-write.table(to_print, here("31_leafcutter","General_GO_ORA.txt"))
-```
-
-
-using 5% deltapsi (bit more lenient)
-```{r}
-go = enricher(unique(lc_genes$genes[lc_genes$p.adjust < 0.05 & abs(lc_genes$deltapsi) >= 0.05]),
-               universe = unique(lc_genes$genes),
-            TERM2GENE = some.molsig,
-            pvalueCutoff = 1, qvalueCutoff = 0.9)
-head(go)[3:9]
-dotplot(go, showCategory=20)
-```
-
 
 ### Separate databases
 
@@ -130,30 +113,6 @@ custom_ora_to_df = function(res, annot=NULL, other_cols=NULL){
 ```{r}
 summary(go[,c(NULL, "ID")])
 ```
-
-```{r}
-sep_go = list()
-gl = unique(lc_genes$genes[lc_genes$p.adjust < 0.05 & abs(lc_genes$deltapsi) >= 0.05])
-universe = unique(lc_genes$genes)
-for (db in prefixes){
-    print(db)
-    t2g = some.molsig[grep(db, some.molsig$term),]
-    ea = enricher(gl, universe= universe, TERM2GENE = t2g, pvalueCutoff = 1, qvalueCutoff = 0.5,minGSSize = 3)
-    df = custom_ora_to_df(ea)
-    print(head(df[1:8], n=10))
-    sep_go[[db]] = ea
-    #print(dotplot(ea, showCategory=20) +ggtitle(db))
-    #print(cnetplot(ea, geneSetID = 1:5) + ggtitle(db))
-}
-
-sig = dplyr::bind_rows(sep_go[["GOBP"]]@result, sep_go[["GOMF"]]@result, sep_go[["HALLMARK"]]@result, sep_go[["REACTOME"]]@result)
-sig = sig[order(sig$p.adjust),]
-head(sig)
-sig_ob = multienrichjam::enrichDF2enrichResult(sig)
-dotplot(sig_ob, color="qvalue", showCategory = 10)
-cnetplot(sig_ob, showCategory=3, categorySize="pvalue", color.params = list(edge=T))
-```
-
 
 
 ```{r}
@@ -184,11 +143,18 @@ barplot(sig_ob, showCategory = 3, color = "qvalue") + theme_bw(base_size = 18)
 ggsave(filename = here("R/plots", "geneontology.pdf"), width=8, height =3)
 cnetplot(sig_ob, showCategory=3, categorySize="pvalue", color.params = list(edge=T))
 ```
+
 ```{r}
 save(sig_ob, file = here("R/plots", "GO_object.RData"))
 ```
 
 
+Write table to get genes lists
+```{r}
+to_print = sig_ob[,c("ID","GeneRatio", "BgRatio"  ,
+                  "pvalue"    ,  "p.adjust" ,   "qvalue"    ,  "geneID"   ,   "Count" )]
+write.table(to_print, here("31_leafcutter","General_GO_ORA.txt"))
+```
 ### Thermogenic test
 
 ```{r}

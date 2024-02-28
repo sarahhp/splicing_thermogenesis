@@ -49,16 +49,7 @@ cat("Encoding as",group_names[1],"=0,",group_names[2],"=1\n")
 numeric_x=as.numeric(meta$group)-1
 
 confounders=meta$donor
-if (ncol(meta)>2) {
-    confounders=meta[,3:ncol(meta),drop=F]
-    # scale continuous confounders
-    for (i in seq_len(ncol(confounders)))
-        if (is.numeric(confounders[,i]))
-            confounders[,i]=scale(confounders[,i])
-    # convert factors to one-of-K encoding
-    confounders=model.matrix( ~., data=confounders )
-    confounders=confounders[,2:ncol(confounders),drop=F] # remove intercept
-}
+confounders=model.matrix( ~0+confounders )
 confounders
 ```
 
@@ -185,7 +176,7 @@ write.table(combo, paste0(opt$output_prefix,"_leafcutter.txt"), quote=F, col.nam
 ```{r}
 summary(combo$p.adjust < 0.05)#36 thousand exon excision events?!
 summary(combo$p.adjust < 0.01)
-summary(combo$p.adjust < 0.05 & abs(combo$deltapsi)> 0.1)#with a delta psi threshold though, we have only 693 which is manageable 
+summary(combo$p.adjust < 0.05 & abs(combo$deltapsi)> 0.1)#with a delta psi threshold though, we have less 
 summary(combo$p.adjust < 0.01 & abs(combo$deltapsi)> 0.1)
 ```
 
@@ -198,7 +189,7 @@ head(robust); nrow(robust); tail(robust, n=10)
 robust = robust[order(robust$genes),c("genes","deltapsi","p.adjust","intron")]
 head(robust)
 
-summary(is.na(robust$genes)) #6 exons unable to be assigned to genes
+summary(is.na(robust$genes)) 
 
 robust[grep("PEMT", robust$genes),]
 ```
@@ -230,7 +221,7 @@ length(unique(lc_genes$genes))
 
 
 ```{r}
-summary(unique(lc_genes$genes) %in% all_sig$gene_name) #41 genes are also sig
+summary(unique(lc_genes$genes) %in% all_sig$gene_name)
 lc_genes$is_DEG = lc_genes$genes %in% all_sig$gene_name
 head(lc_genes)
 ```

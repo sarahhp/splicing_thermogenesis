@@ -4,9 +4,6 @@ __author__ = "Sarah Hazell Pickering (s.h.pickering@medisin.uio.no)"
 __date__ = "2024-01-25"
 
 CHIP_IN = "/projects/imb-pkbphil/sp/chipseq/beige_chip_jul22/deeptools/1bp/norm_tracks"
-OUTDIR = "test"
-
-
 
 def find_chip(mod, cond):
     sample = list(set(config["modification"][mod]) &
@@ -52,12 +49,11 @@ rule compute_matrix:
                         cond = ["White_Adi.","Beige_Adi"])
     output:
         matrix = "{mod}/{mod}_{cond1}_{cond2}-{binsize}.gz",
-        counts = "{mod}/{mod}_{cond1}_{cond2}-{binsize}.counts.tab"
     shell:
         "computeMatrix reference-point -R {input.tsses} -S {input.histones} "
             "-b {params.window} -a {params.window} "
             "-bs {params.binsize} -p {threads} "
-            "--samplesLabel sample "
+            "--samplesLabel {params.samples} "
             "-o {output.matrix} "
 
 rule plot_profile:

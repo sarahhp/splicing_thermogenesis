@@ -25,8 +25,10 @@ knitr::opts_chunk$set(dev = "pdf",
 leaf_junctions = read.delim(here("31_leafcutter","with_donor_info_leafcutter.txt"))
 leaf_junctions = mutate(leaf_junctions, strand = gsub(".*_","", intron),
                    start = as.integer(gsub(":.*","", intron_coords)),
-                   end = as.integer(gsub(".*:","", intron_coords)))
+                   end = as.integer(gsub(".*:","", intron_coords)),
+                   genes_in_cluster = if_else(is.na(genes), "Unknown",genes))
 dim(leaf_junctions)
+summary(leaf_junctions$p.adjust < 0.05 & abs(leaf_junctions$deltapsi)>0.1)
 ```
 
 ```{r}
@@ -52,7 +54,7 @@ ens_dist = group_by(ens_trans,  chr, start, end, strand,cluster_id,deltapsi, p.a
                 mode_intron_number = calc_mode(intron_number),
                 gene = paste(unique(gene_name), collapse=","),
             biotype=paste(unique(biotype), collapse=","),
-            genes_in_cluster =paste(unique(genes), collapse=",") )
+            genes_in_cluster =paste(unique(genes_in_cluster), collapse=",") )
 
 
 ens_dist = arrange(ens_dist, p.adjust) #89k of 132k are from ensembl junctions
@@ -61,7 +63,6 @@ head(ens_dist); nrow(ens_dist)
 
 ```{r}
 cols_to_compare = c("chr","start","end","strand", "cluster_id", "deltapsi", "p.adjust","genes_in_cluster")
-leaf_junctions = rename(leaf_junctions, genes_in_cluster = genes)
 cryptic= setdiff(leaf_junctions[cols_to_compare], ens_dist[cols_to_compare], )
 nrow(cryptic)
 ```
@@ -93,9 +94,12 @@ table(refseq_dist$mode_intron_number)
 
 refseq[refseq$gene_name == "PEMT",]
 ```
+
 ```{r}
+#refseq_dist[grep("155243716|144816108",refseq_dist$start),]
 true_cryptic = setdiff(cryptic, refseq_dist[cols_to_compare])
 nrow(true_cryptic)
+#true_cryptic[grep("155243716|144816108",true_cryptic$start),]
 head(true_cryptic)
 ```
 
@@ -130,7 +134,6 @@ true_cryptic = setdiff(true_cryptic,  fantom_cat[cols_to_compare])
 nrow(true_cryptic)
 table(true_cryptic$verdict)
 ```
-21831 introns cannot be annotated to a osition in a transcript, so are exlcuded from TSS analysis. 
 
 
 ```{r}
@@ -142,7 +145,13 @@ true_cryptic = select(true_cryptic,chr, start, end, strand, deltapsi,p.adjust,cl
 
 all_annot = bind_rows(gencode=ens_dist, refseq=refseq_dist, fantom_cat=fantom_dist, cryptic= true_cryptic,.id = "annotation")
 head(all_annot)
-nrow(all_annot) #perfect all aligned
+nrow(all_annot) ;#nrow(distinct(all_annot))
+```
+
+
+```{r}
+sig = filter(all_annot, p.adjust < 0.05 & abs(deltapsi) > 0.1)
+nrow(sig)
 ```
 
 ## Plot Annotation status
@@ -150,20 +159,13 @@ nrow(all_annot) #perfect all aligned
 ```{r threedatabase}
 all_annot$annotation = factor(all_annot$annotation, levels=c("gencode","refseq","fantom_cat","cryptic"))
 all_annot$is_first_intron = all_annot$min_intron_number == 1
-ggplot(all_annot, aes(x=annotation, fill=annotation)) + geom_bar()  +
+
+sig = filter(all_annot, p.adjust < 0.05 & abs(deltapsi) > 0.1)
+ggplot(sig, aes(x=annotation, fill=annotation)) + geom_bar()  +
     theme_classic(base_size=18) + theme(axis.text.x = element_blank(), axis.ticks.x = element_blank(), 
                                         panel.border = element_blank(), axis.title.x = element_blank()) + 
   geom_text(aes(label = after_stat(count), group = annotation), 
     stat="count", vjust = -1) 
-
-
-ggplot(all_annot, aes(x=annotation, fill=is_first_intron)) + geom_bar() + 
-  geom_text_repel(aes(label = after_stat(count), group = paste(annotation , is_first_intron)), 
-    stat="count", vjust = -1,direction="y" ,seed=4)
-
-ggplot(all_annot, aes(x=annotation, fill=is_first_intron)) + geom_bar() + 
-  geom_text_repel(aes(label = after_stat(count), group = paste(annotation , is_first_intron)), 
-    stat="count", direction="y" , seed=4, nudge_y =1) 
 ```
 
 

@@ -1,0 +1,11 @@
+{   "date":"2024-01-31",
+    "dataset":"loft2015",
+
+    "condition":{"white": ["MED1_white","PPARgamma_white"],
+                 "beige": ["MED1_brite","PPARgamma_brite"] 
+                },
+    "modification":{
+        "PPARG":["PPARgamma_white","PPARgamma_brite"],
+        "MED1": ["MED1_white", "MED1_brite"]
+        },
+}

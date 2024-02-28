@@ -3,9 +3,11 @@ title: "TRIFID_using_extra_introns"
 output: pdf_document
 ---
 Makes Supplementary Table 5.
+trifid volcano plot - Figure2F
 
-Trifid_stats - Figure 2
-Go_networks_plus_trifid.Rmd - Figure 2
+Required for:
+Trifid_stats.Rmd - Figure 2E
+Go_networks_plus_trifid.Rmd - Figure 2G,H
 
 Theres a refseq TRIFID table, so for introns with only a refseq id I use the TRIFID score for refseq transcripts.  
 
@@ -17,7 +19,7 @@ library(dplyr)
 library(ggplot2)
 library(ggrepel)
 
-library(EnhancedVolcano)
+library(clusterProfiler)
 library(here)
 i_am("R/15_TRIFID_using_extra_introns.Rmd")
 ```
@@ -71,17 +73,6 @@ transcripts$transcript_ids[grep("PEMT",transcripts$gene,)] %in% trifid$transcrip
 ```
 
 
-```{r}
-cat("Unrepresented transcripts include those from genes like: \n")
-cat(head(unique(sig_trans$gene[!sig_trans$transcript_ids %in% trifid$transcript_id])))
-
-missing = transcripts[!transcripts$transcript_ids %in% trifid$transcript_id,] #annotate later
-table(missing$annotation)
-missing[grep( "PEMT", missing$gene),] #Just 1 out of 6 significant transcripts are missing for PEMT
-```
-
-Of course  fantom and cryptic transcripts cannot be annotated by this trifid (which is based on the ensembl + refseq annotation); but also many transcripts from gencode cannot be found there either - perhaps they're new transcripts, or not protein coding versions.  The genocde annotation is always changing.  
-
 
 ## Merge trifid and leafcutter
 
@@ -91,7 +82,7 @@ mtrans = mutate(mtrans, condition = if_else(deltapsi > 0, "beige", if_else(delta
                 sig = p.adjust < 0.05 & abs(deltapsi) >= 0.1)
 
 length(unique(mtrans$transcript_ids)) #82 326 transcripts in total
-length(unique(filter(mtrans, sig) %>% pull(transcript_ids))) #1301 + 82 from significant introns > 0.1 dpsi
+length(unique(filter(mtrans, sig) %>% pull(transcript_ids))) 
 ```
 
 
@@ -101,10 +92,23 @@ head(mtrans[c("gene_name", "trifid_score","norm_trifid_score","deltapsi","p.adju
 
 head(mtrans[mtrans$gene == "PEMT",])
 ```
+##Log missing introns,
+
+```{r}
+missing = transcripts[!transcripts$transcript_ids %in% trifid$transcript_id &
+                        !transcripts$intron_coords %in% mtrans$intron_coords,] #annotate later
+
+cat("Unrepresented transcripts include those from genes like: \n")
+cat(head(unique(missing$gene[missing$p.adjust < 0.05 & abs(missing$deltapsi)>0.1])))
+table(missing$annotation)
+missing[grep( "PEMT", missing$gene),] #Missing PEMT transcripts from non-significant cluster
+```
+
+Of course  fantom and cryptic transcripts cannot be annotated by this trifid (which is based on the ensembl + refseq annotation); but also many transcripts from gencode cannot be found there either - perhaps they're new transcripts, or not protein coding versions.  The genocde annotation is always changing.  
+
 
 ## summarise transcripts with introns in multiple directions
 ```{r}
-table(mtrans$num_introns)
 table(mtrans$condition)
 table(paste(mtrans$sig, mtrans$condition))
 ```
@@ -175,7 +179,7 @@ introns = group_by(mtrans, intron_coords,condition, deltapsi, p.adjust, gene, cl
                                                                  transcripts = paste(transcript_ids, sep=",",collapse=","),
                                                                  transcript_names = paste(external_transcript_name,sep=",", collapse=","),) 
 introns = arrange(introns, desc(abs(deltapsi)), desc(mean_trifid_score), p.adjust,)
-dim(introns) #78756 introns with annotations
+dim(introns) #introns with annotations
 head(introns)
 length(unique(introns$intron_coords))
 
@@ -184,11 +188,11 @@ length(unique(introns$intron_coords))
 ## If an intron is not in trifid; report as -0.1
 ```{r}
 sig_clusters = unique(lc$cluster_id[lc$p.adjust < 0.05 & abs(lc$deltapsi) > 0.1])
-summary(sig_clusters %in% introns$cluster_id)#379 clusters have at least 1 trifid annotation; 58 do n
+summary(sig_clusters %in% introns$cluster_id)#420 clusters have at least 1 trifid annotation; 78 do not
 #must have another annotated intron in the cluster, but not have a score already for that intron
 to_add = missing#[missing$cluster_id %in% sig_clusters & 
                  #    !missing$intron_coords %in% introns$intron_coords,]
-nrow(to_add) #160 of the unannotated trifid transcripts, have an annotated cluster and are for an unscored intron
+nrow(to_add) #unannotated trifid transcripts, have an annotated cluster and are for an unscored intron
 
 to_add = mutate(to_add, gene = if_else(gene==".", cluster_id, gene))
 to_add = group_by(to_add, intron_coords, deltapsi, p.adjust, gene, cluster_id, annotation) %>% 
@@ -211,6 +215,19 @@ all_introns = bind_rows(in_trifid=introns, not_in_trifid=to_add[to_add$cluster_i
                         .id = "in_trifid" )
 nrow(all_introns)
 length(unique(all_introns$intron_coords))
+table(all_introns$in_trifid)
+table(filter(all_introns, p.adjust < 0.05 & abs(deltapsi) > 0.1 & annotation %in% c("gencode","refseq")) %>% pull(in_trifid))
+```
+Gencode + Refseq = 647 + 33 = 680 junctions; 
+of which 577 are in trifid; 29 are  not in trifid; 
+and 74 of which none of the junctions in the cluster are in trifid, e.g. 
+
+```{r}
+filter(all_introns, in_trifid == "cluster_not_in_trifid"& p.adjust < 0.05 & abs(deltapsi) > 0.1) %>% 
+  arrange(gene) %>% pull(gene) %>% unique()
+
+filter(all_introns, p.adjust < 0.05 & abs(deltapsi) > 0.1 & annotation %in% c("gencode","refseq")) %>% 
+  pull(cluster_id) %>% unique() %>% length()
 ```
 
 
@@ -228,9 +245,10 @@ ggplot(all_introns, aes(x=sig, y=mean_norm_score, fill=sig)) + geom_violin() +
 ggplot(all_introns, aes(x= sig,  y=mean_norm_score,colour=sig)) + geom_boxplot() +
     geom_jitter(size=0.75)
 ```
-The non-averaged score would be appropriate if the number of transcripts per intron was similar between the groups.  Trifid scores (more approprate if we're comparing across gene instead of pairwise between within each gene); has the average score HIGHER in white than beige.  also a nice validation of the psi threshold.  
+The non-averaged score would be appropriate if the number of transcripts per intron was similar between the groups.  Trifid scores (more appropriate if we're comparing across gene instead of pairwise between within each gene); has the average score HIGHER in white than beige.  also a nice validation of the psi threshold.  
 
 ```{r}
+all_introns[grepl("NDUF", all_introns$gene) & all_introns$p.adjust < 0.05 & abs(all_introns$deltapsi)>0.1,]
 write.table(all_introns, here("31_leafcutter/trifid_all_introns.tsv"), sep="\t",quote=F, row.names = F)
 ```
 
@@ -241,7 +259,7 @@ write.table(all_introns, here("31_leafcutter/trifid_all_introns.tsv"), sep="\t",
 alt_introns = read.delim(here("31_leafcutter/alt_introns_195.tsv"))
 alt_introns = unite(alt_introns, "intron_coords", chr, start, end, strand, sep = ":")
 sig_junctions = filter(all_introns, (p.adjust < 0.05 & abs(deltapsi) > 0.1 ) |
-                                    intron_coords %in% alt_introns$intron_coords)
+                                    intron_coords %in% alt_introns$intron_coords) %>% arrange(p.adjust)
 nrow(sig_junctions)
 table(sig_junctions$sig)
 ```
@@ -270,7 +288,7 @@ paste_uq = function(x){
     return = paste(unique(x), collapse=",")
 }
 mean_of_3s = filter(sig_junctions, in_trifid != "cluster_not_in_trifid") %>%
-    group_by( cluster_id, condition, p.adjust) %>% summarise(mean_norm_score = mean(mean_norm_score),
+    group_by(cluster_id, condition, p.adjust) %>% summarise(mean_norm_score = mean(mean_norm_score),
                                                                 deltapsi = mean(deltapsi),
                                                                 gene = paste(unique(gene), collapse=","),
                                                                 transcript_names= paste(unique(transcript_names), collapse=","))
@@ -280,16 +298,27 @@ filter(mean_of_3s, is.na(deltapsi))
 
 trifid_diff = pivot_wider(mean_of_3s, names_from = condition, values_from = c(deltapsi, mean_norm_score, gene), values_fn = list(deltapsi=mean,mean_norm_score=mean, gene=paste_uq ),
                           id_cols=c("cluster_id", "p.adjust"))
-head(trifid_diff)
+head(trifid_diff); nrow(trifid_diff)#420 clusters - 
+#should be gencode + refseq - cluster_not_in_trifid 
+#470  - 74 
+```
 
+
+```{r}
 
 ## If your other intron is not in trifid speak now
 ## deltapsi we should have from the other table, just the trifid score we could set to -1
-filter(trifid_diff, is.na(deltapsi_beige ) | is.na(deltapsi_white )) # just 28 with an intron pair missing thought I captured all of those
+filter(trifid_diff, is.na(deltapsi_beige ) | is.na(deltapsi_white )) # just 2 with an intron pair missing
+sig_junctions[sig_junctions$cluster_id %in%c("clu_30508_+","clu_3320_-"),] #beacuse the deltapsi goes in the same direction
+
+trifid_diff = filter(trifid_diff,!is.na(deltapsi_beige ) & !is.na(deltapsi_white )) 
+
+trifid_diff[grep("NDUF",trifid_diff$gene_to_plot),]
 ```
 
 ```{r}
-trifid_diff = mutate(trifid_diff, trifid_diff = mean_norm_score_beige-mean_norm_score_white, max_dpsi = max(abs(c(deltapsi_white, deltapsi_beige))))
+trifid_diff = mutate(trifid_diff, trifid_diff = mean_norm_score_beige-mean_norm_score_white, max_dpsi = max(abs(c(deltapsi_white, deltapsi_beige))),
+                     gene_to_plot = if_else(trifid_diff > 0, gene_beige, gene_white))
 head(trifid_diff)
 ```
 
@@ -297,12 +326,12 @@ head(trifid_diff)
 ```{r}
 figs = here("R/plots")
 ggplot(trifid_diff, aes(y=max_dpsi, x=trifid_diff, colour=trifid_diff)) + geom_point() + 
-    geom_label_repel(data=filter(trifid_diff, max_dpsi > 0.25), aes(label=gene_beige)) + 
+    geom_label_repel(data=filter(trifid_diff, max_dpsi > 0.25), aes(label=gene_to_plot)) + 
     scale_color_gradient2(low="turquoise", mid="black", high="red")
 ggsave(file.path(figs, "trifid_difference_v_dpsi.pdf"))
 
 ggplot(trifid_diff, aes(y=-log10(p.adjust), x=trifid_diff, colour=trifid_diff)) + geom_point() + 
-    geom_label_repel(data=filter(trifid_diff, p.adjust < 0.01), aes(label=gene_beige)) + 
+    geom_label_repel(data=filter(trifid_diff, p.adjust < 0.01), aes(label=gene_to_plot)) + 
     scale_color_gradient2(low="turquoise", mid="black", high="red")
 ggsave(file.path(figs, "trifid_difference_v_pvalue.pdf"))
 ```
@@ -313,25 +342,74 @@ write.table(trifid_diff, here("31_leafcutter/trifid_DIFFERENCE_with_Alt_introns.
 ```
 
 
-## Actin changes
+## GSEA
+### Setup
 
 ```{r}
-from_go_term = "ADD3/KANK1/DIXDC1/SVIL/PRKG1/MYO1C/INPP5K/MYO6/DPYSL3/SH3KBP1/ARHGEF10L/ARHGEF2/IQSEC1/FMNL2/BCL6/PALLD/EPB41L3/EMP2/PTPN1/ROCK2/FMN2/STAU2/MICAL3/SPTBN1/FGD4/ATP1A2/CLASP2/RUFY3/AKAP13/PIP5K1C/NCK1/CACNA2D1/BCAR1/WASH3P/CALD1/VPS4A/HIP1R/EHD2"
+molsig <- clusterProfiler::read.gmt(here("annotations","msigdb.v2023.1.Hs.symbols.gmt"))
+head(molsig); nrow(molsig)
+prefixes = c("HALLMARK", "KEGG","REACTOME", "WP", "GOBP", "GOCC","GOMF")
+colnames(molsig) = c("term","gene")
+some.molsig = molsig[gsub("_.*","", molsig$term) %in% prefixes,]
+some.molsig$term = factor(some.molsig$term)
+table(gsub("_.*","", some.molsig$term))
+rm(molsig)
 
-actin = stringr::str_split_1(from_go_term, "/")
-str(actin)
-
-ggplot(filter(trifid_diff, gene_beige %in% actin | gene_white %in% actin), 
-       aes(y=-log10(p.adjust), x=trifid_diff, colour=trifid_diff)) + geom_point() + 
-    geom_label_repel( aes(label=gene_beige)) + 
-    scale_color_gradient2(low="turquoise", mid="black", high="red") + theme_classic(base_size=18)
-ggsave(file.path(figs, "actin_trifid_scores.pdf"), width = 10, height = 10)
-
-ggplot(filter(trifid_diff, gene_beige %in% actin | gene_white %in% actin), 
-       aes(y=max_dpsi, x=trifid_diff, colour=trifid_diff)) + geom_point() + 
-    geom_label_repel( aes(label=gene_beige)) + 
-    scale_color_gradient2(low="turquoise", mid="black", high="red") + theme_classic(base_size=18)
-ggsave(file.path(figs, "actin_trifid_scores_dpsi.pdf"), width = 10, height = 10)
+shorten = function(ont) {
+  abbreviate(gsub("_"," ", tolower(ont)),minlength=40, dot=T, named = F)
+}
 
 ```
+
+
+```{r}
+genelist = trifid_diff$trifid_diff
+names(genelist) = trifid_diff$gene_to_plot
+genelist = genelist[order(genelist, decreasing = T)]
+length(genelist)
+summary(genelist)
+gse = GSEA(genelist, TERM2GENE= some.molsig, pvalueCutoff=1)
+head(gse)
+```
+```{r}
+dotplot(gse, showCategory = 10, x="enrichmentScore")
+cnetplot(gse, showCategory=3, categorySize="pvalue", color.params = list(edge=T))
+to_print = gse[,c("ID","setSize", "enrichmentScore"  ,"NES",
+                  "pvalue"    ,  "p.adjust" ,   "qvalue"    ,  "core_enrichment"   ,   "rank"  )]
+write.table(to_print, here("31_leafcutter","TRIFID_GSEA.txt"))
+```
+
+
+```{r}
+custom_ora_to_df = function(res, annot=NULL, other_cols=NULL){
+    res_df = res[,c(other_cols,"ID","setSize", "enrichmentScore"  ,"NES",
+                  "pvalue"    ,  "p.adjust" ,   "qvalue"    ,  "core_enrichment"   ,   "rank" )]
+
+    print(dim(res_df))
+    if (length(annot)>1){
+        res_df = merge(res_df, annot, by.x="ID", by.y="term", sort=F)
+    }
+    
+    res_df = res_df[order(res_df$p.adjust),]
+    return(res_df)
+}
+```
+
+
+```{r}
+sep_go = list()
+for (db in prefixes){
+    print(db)
+    t2g = some.molsig[grep(db, some.molsig$term),]
+    ea = GSEA(genelist, TERM2GENE = t2g, pvalueCutoff = 1,minGSSize = 3)
+    df = custom_ora_to_df(ea)
+    print(head(df[2:8], n=10))
+    sep_go[[db]] = ea
+    #print(dotplot(ea, showCategory=20) +ggtitle(db))
+    #print(cnetplot(ea, geneSetID = 1:5) + ggtitle(db))
+}
+```
+
+
+
 
