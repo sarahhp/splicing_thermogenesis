@@ -1,7 +1,9 @@
 ---
 title: "21_pemt_cage_clusters"
-output: html_document
+output: pdf_document
 ---
+
+Supplementary Figure 8
 
 ```{r message=FALSE, warning=FALSE}
 library(ComplexHeatmap)

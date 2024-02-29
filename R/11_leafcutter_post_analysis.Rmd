@@ -1,9 +1,12 @@
 ---
 title: "leafcutter_post_analysis"
-output: html_document
+output: pdf_document
 ---
 
-GO and volcano plots 
+Volcano plot - Figure 2A
+and gene ontology - saved overlaps for later
+
+
 ```{r message=FALSE, warning=FALSE}
 library(EnhancedVolcano)
 library(tidyr)
@@ -20,11 +23,11 @@ dim(leaf)
 head(leaf)
 ```
 
-Modifying plot for publication. Using raster for the points to make the file size smaller.  
+Using raster for the points to make the file size smaller.  
 ```{r}
 EnhancedVolcano(leaf, lab=leaf$genes, x="deltapsi", y="p", 
                 xlim=c(-0.7, 0.7), legendPosition = "right",
-                pCutoffCol = "p.adjust", pCutoff = 0.01,
+                pCutoffCol = "p.adjust", pCutoff = 0.05,
                 FCcutoff = 0.1, ylab = "-log10 P value per cluster",
                 xlab="dPSI per junction", legendLabels = c("Not Sig", "dPSI", "p-value", "p-value and dPSI"),
                 raster = T,
@@ -35,18 +38,16 @@ ggsave(filename = here("R/plots", "volcanoplot.pdf"), width=8, height =7)
 #random labelling
 EnhancedVolcano(leaf, lab=leaf$genes, x="deltapsi", y="p", 
                 xlim=c(-0.7, 0.7), legendPosition = "right",
-                pCutoffCol = "p.adjust", pCutoff = 0.01,
+                pCutoffCol = "p.adjust", pCutoff = 0.05,
                 FCcutoff = 0.1, ylab = "-log10 P value per cluster",
+                raster=T,
                 xlab="dPSI per junction",  legendLabels = c("Not Sig", "dPSI", "p-value", "p-value and dPSI"))
 ```
-## Exon switching events
-not for looking at on this dataset -> try leafviz output.  
 
 ```{r}
 sig = filter(leaf, p.adjust < 0.05 & abs(deltapsi) > 0.1)
-head(table(sig$genes))
+#tail(table(sig$genes))
 ```
-
 
 ## Gene Ontology
 
@@ -124,7 +125,7 @@ for (db in prefixes){
     t2g = some.molsig[grep(db, some.molsig$term),]
     ea = enricher(gl, universe= universe, TERM2GENE = t2g, pvalueCutoff = 1, qvalueCutoff = 0.5,minGSSize = 3)
     df = custom_ora_to_df(ea)
-    print(head(df[1:8], n=10))
+    print(head(df[2:8], n=10))
     sep_go[[db]] = ea
     #print(dotplot(ea, showCategory=20) +ggtitle(db))
     #print(cnetplot(ea, geneSetID = 1:5) + ggtitle(db))
@@ -156,24 +157,29 @@ to_print = sig_ob[,c("ID","GeneRatio", "BgRatio"  ,
 write.table(to_print, here("31_leafcutter","General_GO_ORA.txt"))
 ```
 ### Thermogenic test
+Limiting our scope to gene sets from DEGs in white and beige or thermogenic gene sets
 
 ```{r}
 grep_sets = some.molsig[grep("THERMO|BROWN|UNCOUPLING|COLD", some.molsig$term),]
 from_rosi = some.molsig[grep("HALLMARK_FATTY_ACID_METABOLISM|HALLMARK_ADIPOGENESIS|GOBP_MONOCARBOXYLIC_ACID_METABOLIC_PROCESS|GOCC_MITOCHONDRIAL_MATRIX", some.molsig$term),]
 
+terms_to_test = rbind(grep_sets, from_rosi)
+terms_to_test$term = factor(terms_to_test$term)
+
 specific = enricher(unique(lc_genes$genes[lc_genes$p.adjust < 0.05 & abs(lc_genes$deltapsi) >= 0.1]),
                universe = unique(lc_genes$genes),
-            TERM2GENE = rbind(grep_sets, from_rosi),
+            TERM2GENE = terms_to_test,
             pvalueCutoff = 1, qvalueCutoff = 0.9)
+specific = mutate(specific,Description = shorten(Description) )
 head(specific, n=20)[3:9]
 ```
 
-Limiting our scope adipogenesis with 9 genes and FA metabolism with 7 terms are just significant.  
+
 
 ```{r}
-emapplot(pairwise_termsim(specific))
+#emapplot(pairwise_termsim(specific))
 cnetplot(specific, showCategory=5)
-cnetplot(specific, showCategory=10)
+#cnetplot(specific, showCategory=10)
 ```
 
 ```{r}

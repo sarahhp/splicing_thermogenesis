@@ -1,8 +1,10 @@
 ---
-title: "get_splice_sites_take2"
-output: html_document
+title: "get_splice_sites"
+output: pdf_document
 date: "2023-10-31"
 ---
+
+Supplementary Figure 2
 
 For introns not found in 3 db (gencode, refseq and fantom_cat), classify cryptic splice sites.  
 

@@ -2,7 +2,7 @@
 title: "batlas_formatting_averaged"
 author: "Sarah Hp"
 date: '2022-09-02'
-output: html_document
+output: pdf_document
 ---
 
 ```{r}
@@ -50,11 +50,6 @@ ma = as.matrix(ma[3:(ncol(ma)-3)])
 ```{r}
 sm = scale(t(ma))
 #head(sm)
-```
-and if we can annotate from the original
-
-```{r}
-scales::show_col(c("#74B2CD", "#C1A486", "sienna4","grey75"))
 ```
 
 
@@ -147,7 +142,7 @@ dev.off
 ```
 
 
-## BATLAS average expression
+## BATLAS median expression
 
 ```{r}
 load(here("03limma/rpkm_rep_for_plotting.RData"))
@@ -169,21 +164,10 @@ ggplot(batlas_genes,
 
 ```{r}
 to_plot =  group_by(batlas_genes, biorep, donor, condition, donor.condition,rep) %>% summarise(average = mean(fpkm), median= median(fpkm), ave_log = mean(log2(fpkm)))
-ggplot(to_plot, 
-         aes(x=donor, y=ave_log, fill=condition)) +
-    geom_bar(stat = "summary", fun=mean, position="dodge")  + 
-    geom_point( position=position_dodge(0.9)) +
-    ggtitle("Average log BATLAS gene expression")
-
-ggplot(to_plot, 
-         aes(x=donor, y=average, fill=condition)) +
-    geom_bar(stat = "summary", fun=mean, position="dodge")  + 
-    geom_point( position=position_dodge(0.9)) +
-    ggtitle("Average BATLAS gene expression")
 
 ggplot(to_plot, 
          aes(x=donor, y=median, fill=condition, group=donor.condition)) +
-  geom_bar(stat = "summary", fun=mean, position="dodge")  +
+  geom_bar(stat = "summary", fun="mean", position="dodge")  +
     geom_dotplot(binaxis="y", stackdir = "center", position=position_dodge(0.9), fill="black", binwidth=0.35) +
     labs(title="Median BATLAS gene expression", y="Median Expression (FPKM)") + theme_classic(base_size=18) +
   scale_fill_manual(values =c("#B7D6D6", "#EE8A21")) +
@@ -201,8 +185,4 @@ summary(aov(median~condition*donor, data=to_plot))
 compare_means(median~condition, group.by="donor", data=to_plot, method="t.test", p.adjust.method = "fdr")
 ```
 
-
-```{r}
-ggdotplot(to_plot, x = "donor", y = "median", fill="condition",group.by = "condition", position=position_dodge())
-```
 

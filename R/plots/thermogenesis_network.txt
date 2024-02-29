@@ -10,6 +10,7 @@ Hallmark Adipogenesis-SLC19A1
 Hallmark Adipogenesis-NDUFS3
 Hallmark Adipogenesis-MIGA2
 Hallmark Adipogenesis-MYLK
+Hallmark Adipogenesis-SSPN
 Gobp Positive Regulation Of Cold Induced Thermogenesis-PEMT
 Gobp Positive Regulation Of Cold Induced Thermogenesis-LPIN1
 Gobp Positive Regulation Of Cold Induced Thermogenesis-ACSL1
@@ -21,17 +22,23 @@ Gobp Adaptive Thermogenesis-ACSL1
 Gobp Adaptive Thermogenesis-PGAM5
 Gobp Adaptive Thermogenesis-ACADL
 Gobp Adaptive Thermogenesis-THRA
-Gobp Mitochondrial Respiratory Chain Complex Assembly-COA1
-Gobp Mitochondrial Respiratory Chain Complex Assembly-NUBPL
-Gobp Mitochondrial Respiratory Chain Complex Assembly-NDUFS2
-Gobp Mitochondrial Respiratory Chain Complex Assembly-NDUFS3
-Gobp Mitochondrial Respiratory Chain Complex Assembly-NDUFAF5
+Wp Thermogenesis-PPARG
+Wp Thermogenesis-ACSL1
+Wp Thermogenesis-PRKG1
+Wp Thermogenesis-CPT1B
+Wp Thermogenesis-PNPLA2
 Hallmark Fatty Acid Metabolism-ACSL1
 Hallmark Fatty Acid Metabolism-FMO1
 Hallmark Fatty Acid Metabolism-ACADL
 Hallmark Fatty Acid Metabolism-CRAT
 Hallmark Fatty Acid Metabolism-SLC22A5
 Hallmark Fatty Acid Metabolism-AUH
+Reactome Respiratory Electron Transport Atp Synthesis By Chemiosmotic Coupling And Heat Production By Uncoupling Proteins-COA1
+Reactome Respiratory Electron Transport Atp Synthesis By Chemiosmotic Coupling And Heat Production By Uncoupling Proteins-NUBPL
+Reactome Respiratory Electron Transport Atp Synthesis By Chemiosmotic Coupling And Heat Production By Uncoupling Proteins-NDUFS2
+Reactome Respiratory Electron Transport Atp Synthesis By Chemiosmotic Coupling And Heat Production By Uncoupling Proteins-NDUFS3
+Reactome Respiratory Electron Transport Atp Synthesis By Chemiosmotic Coupling And Heat Production By Uncoupling Proteins-NDUFAF5
+Wp Differentiation Of White And Brown Adipocyte-PPARG
 Gobp Monocarboxylic Acid Metabolic Process-PC
 Gobp Monocarboxylic Acid Metabolic Process-LPIN1
 Gobp Monocarboxylic Acid Metabolic Process-PFKM
@@ -47,17 +54,8 @@ Gobp Monocarboxylic Acid Metabolic Process-AUH
 Gobp Monocarboxylic Acid Metabolic Process-PNKD
 Gobp Monocarboxylic Acid Metabolic Process-MLXIPL
 Gobp Monocarboxylic Acid Metabolic Process-CES2
-Reactome Respiratory Electron Transport Atp Synthesis By Chemiosmotic Coupling And Heat Production By Uncoupling Proteins-COA1
-Reactome Respiratory Electron Transport Atp Synthesis By Chemiosmotic Coupling And Heat Production By Uncoupling Proteins-NUBPL
-Reactome Respiratory Electron Transport Atp Synthesis By Chemiosmotic Coupling And Heat Production By Uncoupling Proteins-NDUFS2
-Reactome Respiratory Electron Transport Atp Synthesis By Chemiosmotic Coupling And Heat Production By Uncoupling Proteins-NDUFS3
-Reactome Respiratory Electron Transport Atp Synthesis By Chemiosmotic Coupling And Heat Production By Uncoupling Proteins-NDUFAF5
-Wp Thermogenesis-PPARG
-Wp Thermogenesis-ACSL1
-Wp Thermogenesis-PRKG1
-Wp Thermogenesis-CPT1B
-Wp Differentiation Of White And Brown Adipocyte-PPARG
 Gobp Response To Cold-THRA
+Gobp Negative Regulation Of Cold Induced Thermogenesis-PGAM5
 Gocc Mitochondrial Matrix-PC
 Gocc Mitochondrial Matrix-CA5B
 Gocc Mitochondrial Matrix-BLOC1S1
@@ -71,4 +69,3 @@ Gocc Mitochondrial Matrix-NDUFS2
 Gocc Mitochondrial Matrix-AUH
 Gocc Mitochondrial Matrix-NDUFS3
 Gocc Mitochondrial Matrix-ADHFE1
-Gobp Negative Regulation Of Cold Induced Thermogenesis-PGAM5
