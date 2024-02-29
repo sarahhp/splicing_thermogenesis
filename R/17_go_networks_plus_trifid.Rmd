@@ -3,7 +3,7 @@ title: "go_networks_plus_trifid"
 output: pdf_document
 date: "2023-12-15"
 ---
-Figure 2 G, H
+Figure 2F
 
 ```{r message=FALSE, warning=FALSE}
 library(dplyr)
@@ -18,9 +18,8 @@ library(here); i_am("R/17_go_networks_plus_trifid.Rmd")
 ```{r}
 figs =  here("R/plots")
 load(file.path(figs, "Themogenesis_object.RData"))
-head(specific)
 specific = arrange(specific, desc(Count))
-
+head(specific, n=10)[3:9]
 cnetplot(specific, showCategory=6, categorySize="geneNum")
 ```
 depicts the linkages of genes and biological concepts (e.g. GO terms or KEGG pathways) as a network. 
@@ -30,10 +29,35 @@ to plot the trifid score, we just need a sorted list of these with names of gene
 ```{r}
 trifid = read.delim(here("31_leafcutter", "trifid_DIFFERENCE_with_Alt_introns.tsv"))
 diff = trifid$trifid_diff
-names(diff) = trifid$gene_beige
+names(diff) = trifid$gene_to_plot
 diff = diff[order(diff, decreasing=T)]
 summary(diff)
 ```
+
+## If multiple gene names choose
+
+```{r}
+select_gene = function(gene_str){
+  genel = stringr::str_split_1(gene_str, pattern = ",")
+  unknown = grepl("^A[CP}[0-9]{3,}", genel)
+  if (!unknown[1]){
+    return(genel[1])
+  } else if (!unknown[2]){
+    return(genel[2])
+  } else if (!unknown[3]){
+    return(genel[3])
+  } else{
+    print("unknown gene")
+    return(genel[1])}
+}
+
+sapply(grep(",", names(diff), value=T), select_gene)
+
+names(diff)[grep(",", names(diff))] = sapply(grep(",", names(diff), value=T), select_gene, USE.NAMES=F)
+```
+
+
+
 ```{r}
 shorten = function(ont) {
   no_beg = gsub("^(GO..|HALLMARK|WP|REACTOME)_", "" ,ont)
@@ -45,7 +69,12 @@ specific = mutate(specific, Description = shorten(ID) )
 
 cnetplot(specific, showCategory=6, categorySize="geneNum", foldChange=diff)
 
-cnetplot(specific, showCategory=6, categorySize="geneNum", color.params = list(foldChange = diff),
+cnetplot(specific, showCategory=5, categorySize="geneNum", color.params = list(foldChange = diff),
+         color_category='gold3' ) + scale_colour_gradient2(high="red", low="cyan3", mid="black", na.value="grey", name="TRIFID_diff")
+
+
+cnetplot(filter(specific,ID %in% c("GOCC_MITOCHONDRIAL_MATRIX","GOBP_ADAPTIVE_THERMOGENESIS","HALLMARK_FATTY_ACID_METABOLISM")),
+         showCategory=5, categorySize="geneNum", color.params = list(foldChange = diff),
          color_category='gold3' ) + scale_colour_gradient2(high="red", low="cyan3", mid="black", na.value="grey", name="TRIFID_diff")
 ggsave(file.path(figs, "thermogenesis_network_w_trifid.pdf"), width=9, height=7)
 ```
@@ -71,39 +100,6 @@ heatplot(sig_ob, foldChange = diff, showCategory = 3) + theme_classic(base_size=
   theme(axis.text.x = element_text(angle=45, hjust=1)) + guides(fill = guide_colourbar(reverse=F)) + 
   scale_fill_gradient2(high="red", low="cyan3", mid="black", na.value="grey", name="TRIFID_diff")
 ggsave(file.path(figs, "go_heatplot_w_trifid.pdf"), width=15, height=3)
-```
-
-## Average TRIFID scores per GO term
-```{r}
-actin_genes = sig_ob@result$geneID[1]
-actin_genes = stringr::str_split_1(actin_genes, "/")
-
-mean = filter(trifid, gene_beige %in% actin_genes) %>% summarise(mean(trifid_diff))
-head(mean)
-as.numeric(mean)
-
-average_trifid = function(geneID){
-  score = c()
-  for (i in 1:length(geneID)){
-    genes = stringr::str_split_1(geneID[i], "/")
-    trifid_score = filter(trifid, gene_beige %in% genes) %>% summarise(mean(trifid_diff))
-    score = c(score, as.numeric(trifid_score))
-  }
-  return (score)
-}
-
-with_trifid = mutate(filter(sig_ob,qvalue < 0.05), trifid = average_trifid(geneID))
-head(with_trifid)
-barplot(with_trifid, x="trifid") + labs(x="Average TRIFID difference")+ theme_classic(base_size=18)
-#dotplot(with_trifid, x="trifid") + labs(x="Average TRIFID difference")
-ggsave(file.path(figs, "actin_trifid_average.pdf"))
-```
-
-
-```{r}
-thermo_trifid = mutate(specific, trifid = average_trifid(geneID))
-barplot(thermo_trifid, x="trifid") + labs(x="Average TRIFID difference") + theme_classic(base_size=18)
-ggsave(file.path(figs, "thermogenesis_trifid_average.pdf"), width=9)
 ```
 
 

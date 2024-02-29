@@ -4,3 +4,4 @@
 .Ruserdata
 *.Rproj
 *unnamed-chunk*.pdf
+*.snakemake

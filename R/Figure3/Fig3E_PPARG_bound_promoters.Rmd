@@ -15,7 +15,8 @@ LEAF =  here("31_leafcutter/promoter_binding/intersects")
 
 
 ```{r}
-pparg_perc = read.delim(here(LEAF, "summary.txt"), header=F, sep=" ", col.names= c("bound_TSSs","intersect"))
+pparg_perc = read.delim(here(LEAF, "summary.txt"), header=F, sep=" ", col.names= c("bound_TSSs","intersect")
+                        )
 pparg_perc = mutate(pparg_perc, tss_set=gsub("--.*", "", intersect), pparg_set = gsub(".*--","", gsub(".bed","", intersect)))
 #head(pparg_perc)                        
 total_tsss = read.delim(here(LEAF, "../line_summary.txt"), header=F, sep=" ", col.names= c("total_TSSs","bed_file"))
@@ -37,7 +38,9 @@ ggplot(filter(pparg_perc,pparg_set!="total"), aes(x=tss_set, y=fraction, fill=ts
   coord_cartesian(ylim=c(0,1)) + theme_classic(base_size=18) + 
   geom_text(aes(label=paste(round(fraction*100, 1), "%")),
             vjust=-1) + scale_fill_manual(values=c("#B8D7D6","#FCB54C","#8DA9D6","#D68FBE")) +
-  labs(y="Proportion of PPARG-bound promoters") + facet_wrap(~pparg_set)
+  labs(y="Proportion of PPARG-bound promoters") + facet_wrap(~pparg_set, switch ="x") +
+    theme(axis.text.x = element_blank(), axis.ticks.x = element_blank(), strip.placement="outside",strip.background =element_blank(),
+          axis.title.x = element_blank())
 ggsave(file.path(figs,"PPARG_promoter_fraction.pdf"), width = 10, height=5)
 ```
 

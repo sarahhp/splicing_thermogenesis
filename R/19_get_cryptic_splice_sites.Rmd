@@ -1,0 +1,97 @@
+---
+title: "get_splice_sites_take2"
+output: html_document
+date: "2023-10-31"
+---
+
+For introns not found in 3 db (gencode, refseq and fantom_cat), classify cryptic splice sites.  
+
+Requires: leafviz processed object which contains classifiations under the column "verdict"  
+
+```{r message=FALSE, warning=FALSE}
+library(tidyr)
+library(dplyr)
+library(ggplot2)
+library(here); i_am("R/19_get_cryptic_splice_sites.Rmd")
+bed_cols = c("chr","start","end","genes","deltapsi","strand")
+```
+
+
+```{r}
+junctions= read.delim(here("31_leafcutter","three_database_info_sig_junctions.tsv"), header=T)
+nrow(junctions)
+head(junctions)
+```
+
+
+## Clip splice site regions
+
+```{r}
+load(here("31_leafcutter/leafviz.RData"))
+head(introns) #<- we only need this table
+nrow(introns)# prefiltered for p.adjust and deltapsi
+```
+
+
+```{r}
+table(junctions$annotation)
+with_verdict = merge(junctions, introns[c("clusterID","chr","start","end","verdict")], 
+                     by.x=c("cluster_id","chr","start","end"), by.y=c("clusterID","chr","start","end"))
+table(with_verdict$verdict)
+table(with_verdict$verdict, with_verdict$annotation)
+```
+```{r}
+ggplot(filter(with_verdict,annotation=="cryptic"), aes(x=verdict, fill=verdict)) + geom_bar()+
+     theme_classic(base_size=18) + theme(axis.text.x = element_blank(), axis.ticks.x = element_blank(), 
+                                        panel.border = element_blank(), axis.title.x = element_blank()) + 
+  geom_text(aes(label = after_stat(count), group = annotation), 
+    stat="count", vjust = -1) + scale_y_continuous(expand = c(0, 0), limits = c(0, 39))
+ggsave(here("R/plots/cryptic_splice_site_annotation.pdf"))
+```
+
+
+## Make intron coord bed
+not exon to exon coords (as leafcutter provides), but interior intron coords.  Also need to convert from gtf (1-based) to bed (0-based) , which means subtracting 1 from the upstream position.  
+```{r}
+sig_introns = select(with_verdict, chr, start, end, gene, deltapsi, strand, p.adjust, annotation, transcript_ids, verdict) %>%
+  mutate( start = start, end = end - 1)
+
+head(sig_introns)
+nrow(sig_introns)
+write.table(sig_introns, here("31_leafcutter/sig_leafcutter_interior_intron_coords.bed"), 
+            row.names = F, col.names = F , quote=F, sep="\t")
+```
+
+
+```{r}
+cryptic_introns = filter(sig_introns, annotation == "cryptic")
+nrow(cryptic_introns)
+
+five_prime_flanks = mutate(cryptic_introns, start = if_else(strand == "+", start, end - 5), 
+                                                        end= if_else(strand=="+", start+5, end),
+                           annotation = if_else(verdict %in% c("cryptic_fiveprime", "cryptic_unanchored", "novel annotated pair", "unknown_strand"), 
+                                                "cryptic_5'", 
+                                                "5'"),
+                           gene = paste(annotation, gene, sep="_"))
+nrow(five_prime_flanks)
+#head(five_prime_flanks)
+
+three_prime_flanks = mutate(cryptic_introns, start = if_else(strand == "+", end-3, start), 
+                                                        end= if_else(strand=="+", end, start +3),
+                            annotation = if_else(verdict %in% c("cryptic_threeprime", "cryptic_unanchored", "novel annotated pair", "unknown_strand"), 
+                                                "cryptic_3'", 
+                                                "3'"),
+                            gene = paste(annotation, gene, sep="_"))
+#head(three_prime_flanks)
+
+flanks = rbind(five_prime_flanks, three_prime_flanks)
+head(flanks)
+flanks = filter(flanks, grepl("cryptic", annotation))
+nrow(flanks)
+table(flanks$verdict)
+write.table(flanks, here("31_leafcutter/leafcutter_cryptic_splice_sites_5bp_3bp.bed"), sep="\t", quote = F, row.names = F, col.names = F)
+```
+
+
+
+

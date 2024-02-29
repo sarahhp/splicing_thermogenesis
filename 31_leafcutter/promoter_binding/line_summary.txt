@@ -1,5 +1,5 @@
-146 lc_3db_beige_promoters.uniq.bed
-151 lc_3db_white_promoters.uniq.bed
-12326 lc_3db_not_sig_promoters.merged.bed
-59 white_and_beige_promoters.merged.bed
+170 lc_3db_beige_promoters.uniq.bed
+174 lc_3db_white_promoters.uniq.bed
+63 white_and_beige_promoters.merged.bed
+12275 lc_3db_not_sig_promoters.merged.bed
 12682 total

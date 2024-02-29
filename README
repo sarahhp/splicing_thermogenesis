@@ -1,0 +1,4 @@
+annotations
+to produce index files in annotations/*/*_all_exons.txt.gz / _threeprime.bed.gz ect.  
+
+use leafviz script from the leafcutter repository gtf2leafcutter.pl:  leafcutter/leafviz/gtf2leafcutter.pl

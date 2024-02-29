@@ -223,6 +223,7 @@ write.table(beige, here("31_leafcutter", "histone_profile/lc_3db_beige_TSSes.bed
 ```{r}
 deg = read.delim(here("03limma/any_and_all_donor_DGE.tsv"))
 s6_deg = filter(deg,adj.P.Val.s6 < 0.01)
+nrow(s6_deg)
 is_deg = function(intron_id){
     gene = gsub("_.*","",intron_id)
     res = gene %in% s6_deg$gene_name
