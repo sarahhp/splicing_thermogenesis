@@ -5,6 +5,9 @@ date: "2023-08-18"
 output: pdf_document
 ---
 
+Figure 1E: GO of beige upregulated genes (adjusted p < 0.05) in all donors
+ - R/plots/six_donor_DGE_limma/beige_go-1.pdf
+
 ```{r message=FALSE, warning=FALSE}
 library(limma)
 library(edgeR)
@@ -167,7 +170,7 @@ mart <- biomaRt::useMart(biomart = "ensembl",
 
 #searchFilters(mart, pattern="ensembl")
 
-annot = getBM(c("external_gene_name", "description", "gene_biotype","ensembl_gene_id", "ensembl_gene_id_version"), 
+annot = getBM(attributes=c("external_gene_name", "description", "gene_biotype","ensembl_gene_id", "ensembl_gene_id_version"), 
               filters = "ensembl_gene_id",
               values = filt$genes$Geneid,
               mart = mart)
@@ -217,7 +220,8 @@ head(design)
 
 ```{r}
 explicit_fit = lmFit(norm, design=design)
-coi = makeContrasts(s1 = b.s1 - w.s1,
+coi = makeContrasts(background = frac_assigned_to_genes,
+                    s1 = b.s1 - w.s1,
                     s2 = b.s2 - w.s2,
                     s3 = b.s3 - w.s3,
                     s4 = b.s4 - w.s4,
@@ -235,8 +239,8 @@ summary(results)
 results= decideTests(efit, method="separate", adjust.method = "BH", p.value = 0.05)
 summary(results)
 vennDiagram(results[,1:4])
-vennDiagram(results[,c(3:6)])
-vennDiagram(results[,c(1:2,5:6)])
+vennDiagram(results[,c(4:7)])
+vennDiagram(results[,c(2:3,6:7)])
 ```
 
 s4 has a small amount of independent genes, but not more than subject2.   
@@ -279,7 +283,7 @@ make_upset_table = function(res) {
 ```
 
 ```{r}
-results_bin = make_upset_table(results)
+results_bin = make_upset_table(results[,2:7])
 upset(results_bin,nsets=14,
       order.by = "freq", nintersects=30, text.scale=1.5) 
 
@@ -290,9 +294,8 @@ upset(results_bin[,grep("beige", colnames(results_bin))],nsets=14,
       order.by = "freq", nintersects=25, text.scale=1.5) 
 ```
 
-
 ### Overall pvalue
-We can extract merely like this
+We can extract a global pvalue across tests like this
 
 ```{r}
 donors = c('s1','s2','s3','s4','s5','s6')
@@ -390,7 +393,7 @@ print(p)
 
 ```
 
-## GO 
+## GO analysis
 
 ```{r}
 molsig <- clusterProfiler::read.gmt(here("annotations/msigdb.v2023.1.Hs.symbols.gmt"))
@@ -406,63 +409,6 @@ shorten = function(ont) {
 }
 ```
 
-## GO: Genes DE in ANY donor (n=5109)
-```{r}
-genes= anytable$gene_name[anytable$adj.P.Val < 0.001]
-any = enricher(genes,
-               universe = anytable$gene_name,
-            TERM2GENE = some.molsig)
-head(any)
-dotplot(any, showCategory = 20) + ggtitle (paste0("Any test; n=",  length(genes)))
-```
-
-```{r}
-head(results)
-decided = results[,donors]
-rownames(decided) = filt$genes$gene_name[order(rownames(decided))]
-head(decided); nrow(decided)
-ddf = as.data.frame(decided)
-ddf$str = paste0(ddf$s3,ddf$s4,ddf$s2,ddf$s1,ddf$s6,ddf$s5)
-
-contrasts = list(beige_all =  rownames(ddf)[grep("1{6}", ddf$str)],
-                 s2_beige = rownames(ddf)[grep("001000", ddf$str)],
-                 s4_6_beige = rownames(ddf)[grep("010010", ddf$str)],
-                 s4_beige = rownames(ddf)[grep("010000", ddf$str)],
-                 s6_beige = rownames(ddf)[grep("000010", ddf$str)],
-                 s5_beige = rownames(ddf)[grep("000001", ddf$str)],
-                 
-                 s4_6_5_beige = rownames(ddf)[grep("010011", ddf$str)],
-                 s3_s2_beige =rownames(ddf)[grep("101000", ddf$str)],
-                 
-                 s3_beige = rownames(ddf)[grep("100000", ddf$str)],
-                 beige_not9 = rownames(ddf)[grep("111011", ddf$str)],
-                 
-                 white_all = rownames(ddf)[grep("(-1){6}", ddf$str)],
-                 s2_white = rownames(ddf)[grep("00-1000", ddf$str)],
-                 s4_6_white = rownames(ddf)[grep("0-100-10", ddf$str)],
-                 s4_white = rownames(ddf)[grep("0-10000", ddf$str)],
-                 s6_white = rownames(ddf)[grep("0000-10", ddf$str)],
-                 s5_white =  rownames(ddf)[grep("00000-1", ddf$str)],
-                 
-                 s4_6_5_white = rownames(ddf)[grep("0-100-1-1", ddf$str)],
-                 s3_s2_white =rownames(ddf)[grep("-10-1000", ddf$str)],
-                 white_not9 = rownames(ddf)[grep("-1-1-10-1-1", ddf$str)],
-                 s3_white = rownames(ddf)[grep("-100000", ddf$str)]
-)
-                
-str(contrasts)
-```
-## GO for combinations of donors
-
-```{r}
-go_all = compareCluster(geneClusters = contrasts,
-                        fun = "enricher", 
-                        TERM2GENE = some.molsig,
-                        universe = anytable$gene_name)
-head(go_all)
-p = dotplot(go_all, showCategory =3, font.size=10) +  theme(axis.text.x = element_text(angle=45, hjust=1))  
-p + scale_y_discrete(labels=shorten(levels(p$data$Description)))
-```
 
 ## GO beige in all donors
 Using the significance table rather than the results test because its more reproducible.  
@@ -519,15 +465,9 @@ head(long)
 long = group_by(long, Geneid) %>% mutate(zscore= scale(fpkm))
 head(long)
 ggplot(long[long$gene_name == "PPARG",]) + geom_bar(stat="summary",fun="mean", aes(x=donor.condition, y=fpkm, fill=condition)) + 
-  geom_point(aes(x=donor.condition, y=fpkm))
+  geom_point(aes(x=donor.condition, y=fpkm)) + theme(axis.text.x=element_text(angle=45, hjust=1))
 ```
 
-
-
-```{r}
-ggplot(long[long$gene_name == "PPARG",]) + geom_boxplot(aes(x=condition, y=fpkm)) + 
-  geom_jitter(aes(x=condition, y=fpkm, colour=donor), size=5)
-```
 
 
 ```{r}
