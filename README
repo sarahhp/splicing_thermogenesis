@@ -1,3 +1,8 @@
+Scripts for processing of data presented in: 
+
+Hazell Pickering S, Abdelhalim M, Collas P and Briand N (2024) Alternative isoform expression of key thermogenic genes in human beige adipocytes. Front. Endocrinol. 15:1395750. doi: 10.3389/fendo.2024.1395750
+
+
 annotations
 to produce index files in annotations/*/*_all_exons.txt.gz / _threeprime.bed.gz ect.  
 
